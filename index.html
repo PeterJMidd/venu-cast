@@ -1006,13 +1006,11 @@ function exportEvents(){
 // MAIN EXPORT — lowest grain: every venue × every date
 // ══════════════════════════════════════════════════════════════════════════════
 function openExport(){
-  // We export ALL venues × ALL dates (historical + forecast per venue)
   var header='venue,date,dow,type,sales,guests,atv,forecast_sales,lower_90,upper_90,forecast_guests,forecast_atv,is_holiday,holiday_name,temp_max_c,adj_factor,model';
   var lines=[header];
-
   var venues=[...new Set(AR.map(r=>r.venue))].sort();
 
-  // ── Historical rows — one row per venue per date ──
+  // ── Historical rows — one row per venue per date (raw actuals) ──
   AR.forEach(r=>{
     var holName=HD.find(h=>h.date===r.dateStr)?.name||'';
     var vms=getVMs(r.venue);
@@ -1020,58 +1018,92 @@ function openExport(){
     lines.push([
       `"${esc(r.venue)}"`,r.dateStr,DOW[r.dow],'historical',
       r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),
-      '','','','','',                         // no forecast cols for historical
+      '','','','','',
       HS.has(r.dateStr)?1:0,
       `"${esc(holName)}"`,
       t!=null?t.toFixed(1):'',
-      '1.000',
-      ''
+      '1.000',''
     ].join(','));
   });
 
-  // ── Forecast rows — per venue separately ──
-  venues.forEach(ven=>{
-    var res=fcResultByVenue[ven]||fcResultByVenue['__all__'];
-    if(!res)return;
-    var{d,adjFc,vms,ts,tstat}=res;
-    if(!d||!d.forecast_dates)return;
-    var model=d.model||'';
+  // ── Forecast rows ──
+  // Use the all-venues forecast as the total.
+  // Split each forecast day proportionally across venues using
+  // each venue's DOW-specific historical share, so that
+  // SUM(venue forecasts per day) == total forecast for that day exactly.
+  var res=fcResultByVenue['__all__']||Object.values(fcResultByVenue)[0];
+  if(res&&res.d&&res.d.forecast_dates){
+    var d=res.d, adjFc=res.adjFc, model=d.model||'';
 
-    // Guest + ATV forecasts: scale by ratio from historical
-    var histAgg=getAgg(ven);
-    var histSales=histAgg.map(r=>r.sales), histGuests=histAgg.map(r=>r.guests), histAtv=histAgg.map(r=>r.atv);
-    var avgS=avgs(histSales)||1, avgG=avgs(histGuests), avgA=avgs(histAtv);
-    var gRatio=avgS?avgG/avgS:0, aRatio=avgS?avgA/avgS:0;
+    // Total sales per venue for overall share
+    var totalSales=AR.reduce((s,r)=>s+r.sales,0)||1;
+    var venueAvgShare={};
+    venues.forEach(ven=>{
+      venueAvgShare[ven]=AR.filter(r=>r.venue===ven).reduce((s,r)=>s+r.sales,0)/totalSales;
+    });
+
+    // DOW-level share per venue: what % of all sales on each weekday belongs to this venue
+    var venueDOWShare={};
+    venues.forEach(ven=>{
+      venueDOWShare[ven]={};
+      for(var dow=0;dow<7;dow++){
+        var vd=AR.filter(r=>r.venue===ven&&r.dow===dow).reduce((s,r)=>s+r.sales,0);
+        var td=AR.filter(r=>r.dow===dow).reduce((s,r)=>s+r.sales,0)||1;
+        venueDOWShare[ven][dow]=vd/td;
+      }
+    });
+
+    // Per-venue guest/sales and ATV ratios from history
+    var venueRatios={};
+    venues.forEach(ven=>{
+      var vRows=AR.filter(r=>r.venue===ven);
+      var vS=vRows.reduce((s,r)=>s+r.sales,0)||1;
+      var vG=vRows.reduce((s,r)=>s+r.guests,0);
+      var vA=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;
+      venueRatios[ven]={gRatio:vG/vS, avgAtv:vA};
+    });
 
     d.forecast_dates.forEach((ds,i)=>{
       var p=adjFc[i]||{};
-      var fcS=p.fc||0, loS=p.lo||0, hiS=p.hi||0;
-      var fcG=fcS*gRatio, fcA=fcS*aRatio;
+      var totalFcS=p.fc||0, totalFcLo=p.lo||0, totalFcHi=p.hi||0;
       var dow=new Date(ds+'T00:00:00').getDay();
       var holName=HD.find(h=>h.date===ds)?.name||'';
-      var t=getTempForDate(ds,vms);
-      lines.push([
-        `"${esc(ven)}"`,ds,DOW[dow],'forecast',
-        '','','',                              // no historical cols for forecast
-        fcS.toFixed(2),loS.toFixed(2),hiS.toFixed(2),
-        fcG.toFixed(0),fcA.toFixed(2),
-        HS.has(ds)?1:0,
-        `"${esc(holName)}"`,
-        t!=null?t.toFixed(1):'',
-        (p.adj||1).toFixed(3),
-        `"${esc(model)}"`
-      ].join(','));
+
+      // Normalise DOW shares so they sum to exactly 1 across all venues
+      var shareSum=venues.reduce((s,ven)=>s+(venueDOWShare[ven][dow]||venueAvgShare[ven]),0)||1;
+
+      venues.forEach(ven=>{
+        var share=(venueDOWShare[ven][dow]||venueAvgShare[ven])/shareSum;
+        var fcS=totalFcS*share;
+        var fcLo=totalFcLo*share;
+        var fcHi=totalFcHi*share;
+        var fcG=fcS*(venueRatios[ven]?.gRatio||0);
+        var fcA=venueRatios[ven]?.avgAtv||0;
+        var vms=getVMs(ven);
+        var t=getTempForDate(ds,vms);
+        lines.push([
+          `"${esc(ven)}"`,ds,DOW[dow],'forecast',
+          '','','',
+          fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),
+          fcG.toFixed(0),fcA.toFixed(2),
+          HS.has(ds)?1:0,
+          `"${esc(holName)}"`,
+          t!=null?t.toFixed(1):'',
+          (p.adj||1).toFixed(3),
+          `"${esc(model)}"`
+        ].join(','));
+      });
     });
-  });
+  }
 
   var csv=lines.join('\n');
   document.getElementById('csvTxt').value=csv;
-  document.getElementById('epScope').textContent=`${venues.length} venues · ${lines.length-1} rows`;
+  var fcDays=res?.d?.forecast_dates?.length||0;
+  document.getElementById('epScope').textContent=
+    `${venues.length} venues · ${fcDays} forecast days · ${lines.length-1} rows`;
   var ep=document.getElementById('ep');
   ep.style.display='';
   ep.scrollIntoView({behavior:'smooth'});
-
-  // Auto-download
   dlString(csv,`venu_cast_export_${iso(new Date())}.csv`,'text/csv');
 }
 
