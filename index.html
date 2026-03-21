@@ -164,12 +164,19 @@ textarea:focus{border-color:var(--amb)}
         <button class="pill" onclick="setM('guests',this)">Guests</button>
         <button class="pill" onclick="setM('atv',this)">Avg Txn</button>
       </div>
-      <span class="lbl">Forecast</span>
-      <input type="number" id="fcN" value="30" min="1" max="365" onchange="runForecast()">
+      <span class="lbl">Forecast Period</span>
       <div class="pills" id="uP">
         <button class="pill on" onclick="setU('days',this)">Days</button>
         <button class="pill" onclick="setU('months',this)">Months</button>
       </div>
+      <select id="fcSel" onchange="document.getElementById('fcN').value=this.value;runForecast()" style="width:90px">
+        <option value="30" selected>30 days</option>
+        <option value="60">60 days</option>
+        <option value="90">90 days</option>
+        <option value="180">180 days</option>
+        <option value="365">365 days</option>
+      </select>
+      <input type="number" id="fcN" value="30" min="1" max="730" style="display:none">
       <button class="grn" onclick="runForecast()" id="runBtn">▶ Run Forecast</button>
     </div>
 
@@ -375,14 +382,27 @@ function esc(s){return String(s).replace(/"/g,'""')}
 async function testApi(){
   var url=getApiUrl();
   if(!url){setSt('apiSt','err','⚠ Enter your Render API URL first');return}
-  setSt('apiSt','busy','<span class="spin">⚙</span>&nbsp;Testing connection to '+url+' …');
-  try{
-    var r=await fetch(url+'/health',{signal:AbortSignal.timeout(12000)});
-    var d=await r.json();
-    var libs=Object.entries(d.libraries||{}).map(([k,v])=>`<span class="bdg ${v==='ok'?'g':'r'}">${k}</span>`).join(' ');
-    setSt('apiSt','ok','✓ API connected &nbsp;'+libs);
-  }catch(e){
-    setSt('apiSt','err','✕ Cannot reach API. Check URL — Render free tier cold-starts in ~30s. Error: '+e.message);
+  var btn=document.getElementById('testBtn');
+  btn.disabled=true;
+  // Try up to 3 times — Render free tier cold start can take 30-50s
+  for(var attempt=1;attempt<=3;attempt++){
+    setSt('apiSt','busy',`<span class="spin">⚙</span>&nbsp;Waking up Render server… attempt ${attempt}/3 (cold start can take 50s)`);
+    try{
+      var r=await fetch(url+'/health',{signal:AbortSignal.timeout(55000)});
+      var d=await r.json();
+      var libs=Object.entries(d.libraries||{}).map(([k,v])=>`<span class="bdg ${v==='ok'?'g':'r'}">${k}</span>`).join(' ');
+      setSt('apiSt','ok','✓ API connected &nbsp;'+libs);
+      btn.disabled=false;
+      return;
+    }catch(e){
+      if(attempt<3){
+        setSt('apiSt','busy',`<span class="spin">⚙</span>&nbsp;Still waking up… attempt ${attempt+1}/3`);
+        await new Promise(r=>setTimeout(r,3000));
+      } else {
+        setSt('apiSt','err','✕ Could not reach API after 3 attempts. Check your URL is correct: '+url+'/health — try opening that URL directly in your browser.');
+        btn.disabled=false;
+      }
+    }
   }
 }
 
@@ -1189,7 +1209,19 @@ function sv(v,btn){
   document.getElementById('vDow').style.display=v==='dow'?'':'none';
 }
 function setM(m,btn){CM=m;document.querySelectorAll('#mP .pill').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');runForecast();}
-function setU(u,btn){CU=u;document.querySelectorAll('#uP .pill').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');runForecast();}
+function setU(u,btn){
+  CU=u;
+  document.querySelectorAll('#uP .pill').forEach(b=>b.classList.remove('on'));
+  if(btn)btn.classList.add('on');
+  // Rebuild dropdown options for selected unit
+  var sel=document.getElementById('fcSel');
+  var opts=u==='days'
+    ?[{v:30,l:'30 days'},{v:60,l:'60 days'},{v:90,l:'90 days'},{v:180,l:'180 days'},{v:365,l:'365 days'}]
+    :[{v:1,l:'1 month'},{v:2,l:'2 months'},{v:3,l:'3 months'},{v:6,l:'6 months'},{v:12,l:'12 months'}];
+  sel.innerHTML=opts.map((o,i)=>`<option value="${o.v}"${i===0?' selected':''}>${o.l}</option>`).join('');
+  document.getElementById('fcN').value=opts[0].v;
+  runForecast();
+}
 function onDrop(ev){ev.preventDefault();document.getElementById('dz').classList.remove('drag');var f=ev.dataTransfer.files[0];if(f)readF(f);}
 function onFI(inp){if(inp.files[0])readF(inp.files[0]);}
 function readF(f){var r=new FileReader();r.onload=e=>loadData(parseCSV(e.target.result));r.readAsText(f);}
