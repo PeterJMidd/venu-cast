@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Venu Cast — Sales Forecast</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@300;400;500&family=Syne:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#07080f;--s:#0c0d1b;--c:#10111f;--b:#1a1d33;--b2:#252844;--t:#c5cde8;--m:#4d5673;--amb:#f59e0b;--bl:#3b82f6;--g:#34d399;--r:#f87171;--fn:'Syne',sans-serif;--fm:'DM Mono',monospace}
+html,body{background:var(--bg);color:var(--t);font-family:var(--fn);min-height:100vh}
+.w{padding:18px 24px;max-width:1400px;margin:0 auto}
+.sp{flex:1}
+.hdr{display:flex;align-items:center;gap:10px;padding-bottom:14px;margin-bottom:14px;border-bottom:1px solid var(--b);flex-wrap:wrap}
+.logo{font-size:19px;font-weight:800;background:linear-gradient(120deg,var(--amb),#fb923c);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.logo-sub{font-family:var(--fm);font-size:9px;letter-spacing:3px;text-transform:uppercase;color:var(--m);margin-top:2px}
+.chip{background:var(--s);border:1px solid var(--b);border-radius:5px;padding:2px 7px;font-family:var(--fm);font-size:10px;color:var(--m)}
+.chip b{color:var(--t);font-weight:500}
+.dvd{width:1px;height:18px;background:var(--b2)}
+button{padding:5px 12px;border-radius:7px;border:1px solid var(--b2);cursor:pointer;font-family:var(--fn);font-size:11px;font-weight:700;background:var(--c);color:var(--t);transition:all .15s;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+button:hover{background:var(--b2)}
+button.amb{background:var(--amb);color:#07080f;border-color:var(--amb)}
+button.amb:hover{background:#d97706}
+button.grn{background:#065f46;color:var(--g);border-color:var(--g)}
+button.grn:hover{background:#047857}
+button:disabled{opacity:.4;cursor:default}
+.drop{border:2px dashed var(--b2);border-radius:14px;padding:60px 28px;text-align:center;cursor:pointer;transition:all .2s;background:var(--s)}
+.drop.drag{border-color:var(--amb);background:#120e00}
+.drop:hover{border-color:var(--b)}
+.drop .ico{font-size:44px;margin-bottom:14px;display:block}
+.drop .t1{font-size:18px;font-weight:800;color:#dde1f5;margin-bottom:8px}
+.drop .t2{font-size:12px;color:var(--m);line-height:2}
+code{font-family:var(--fm);font-size:10px;background:var(--c);border:1px solid var(--b);border-radius:3px;padding:1px 5px;color:var(--amb)}
+.nav{display:flex;gap:2px;background:var(--s);border:1px solid var(--b);border-radius:8px;padding:2px;margin-bottom:12px;width:fit-content;flex-wrap:wrap}
+.ntb{padding:5px 14px;border:none;border-radius:5px;cursor:pointer;font-size:11px;font-weight:700;background:transparent;color:var(--m);font-family:var(--fn)}
+.ntb.on{background:var(--b2);color:var(--t)}
+.ntb:not(.on):hover{color:var(--t)}
+.ctrls{display:flex;gap:7px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.lbl{font-size:10px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:var(--m);white-space:nowrap}
+.pills{display:flex;background:var(--s);border:1px solid var(--b);border-radius:7px;padding:2px;gap:2px}
+.pill{padding:4px 10px;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;background:transparent;color:var(--m);font-family:var(--fn)}
+.pill.on{background:var(--amb);color:#07080f}
+.pill:not(.on):hover{color:var(--t);background:var(--b2)}
+select,input[type=number],input[type=text],input[type=date]{background:var(--s);border:1px solid var(--b);color:var(--t);border-radius:6px;outline:none;font-family:var(--fm);font-size:11px;padding:4px 8px;transition:border .15s}
+select:focus,input:focus{border-color:var(--amb)}
+input[type=number]{width:60px}
+.kgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:7px;margin-bottom:12px}
+@media(max-width:700px){.kgrid{grid-template-columns:repeat(2,1fr)}}
+.kc{background:var(--c);border:1px solid var(--b);border-radius:10px;padding:12px 14px;border-left:3px solid var(--b2)}
+.kc.bl{border-left-color:var(--bl)}.kc.ba{border-left-color:var(--amb)}.kc.bg{border-left-color:var(--g)}
+.kn{font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--m);margin-bottom:4px}
+.kv{font-family:var(--fm);font-size:20px;font-weight:500;color:#dde1f5}
+.kc.ba .kv{color:var(--amb)}.kc.bg .kv{color:var(--g)}
+.ks{font-family:var(--fm);font-size:9px;color:var(--m);margin-top:3px}
+.cc{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:14px 18px;margin-bottom:12px}
+.chdr{display:flex;align-items:center;gap:7px;margin-bottom:10px;flex-wrap:wrap}
+.ct{font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--m)}
+.bdg{font-size:9px;font-family:var(--fm);padding:2px 6px;border-radius:3px;background:#f59e0b18;color:var(--amb);border:1px solid #f59e0b28}
+.bdg.b{background:#3b82f618;color:#93c5fd;border-color:#3b82f628}
+.bdg.g{background:#34d39918;color:var(--g);border-color:#34d39928}
+.bdg.r{background:#f8717118;color:var(--r);border-color:#f8717128}
+.minfo{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin-left:auto}
+.mp{font-family:var(--fm);font-size:9px;color:var(--m)}
+.mp b{color:var(--amb);font-weight:500}
+.vtabs{display:flex;gap:2px;background:var(--s);border:1px solid var(--b);border-radius:7px;padding:2px;width:fit-content;margin-bottom:10px}
+.vtb{padding:4px 12px;border:none;border-radius:5px;cursor:pointer;font-size:10px;font-weight:700;background:transparent;color:var(--m);font-family:var(--fn)}
+.vtb.on{background:var(--b2);color:var(--t)}
+.vtb:not(.on):hover{color:var(--t)}
+.dgrid{display:grid;grid-template-columns:repeat(7,1fr);gap:5px;margin-top:4px}
+.dcell{text-align:center;background:var(--s);border:1px solid var(--b);border-radius:7px;padding:9px 3px}
+.ddl{font-size:9px;font-weight:700;color:var(--m);text-transform:uppercase;letter-spacing:.3px;margin-bottom:3px}
+.dv{font-size:12px;font-weight:500;font-family:var(--fm);color:var(--t)}.dv.hi{color:var(--amb)}
+.dbar{height:2px;border-radius:2px;background:var(--b);margin-top:5px}
+.dfill{height:2px;border-radius:2px;background:linear-gradient(90deg,var(--bl),var(--amb))}
+.tbl{width:100%;border-collapse:collapse;font-size:11px}
+.tbl th{text-align:left;padding:7px 9px;font-size:9px;font-weight:700;letter-spacing:.7px;text-transform:uppercase;color:var(--m);border-bottom:1px solid var(--b)}
+.tbl td{padding:6px 9px;border-bottom:1px solid var(--b);color:var(--t);font-family:var(--fm);vertical-align:middle}
+.tbl tr:hover td{background:var(--s)}
+.tbl select,.tbl input{background:var(--s);border:1px solid var(--b);border-radius:4px;color:var(--t);font-size:10px;padding:2px 5px;font-family:var(--fm)}
+.wrow{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:12px}
+.wc{padding:6px 12px;background:var(--s);border:1px solid var(--b);border-radius:7px;font-family:var(--fm);font-size:10px;color:var(--t);display:flex;gap:6px;align-items:center}
+.wc .wd{width:7px;height:7px;border-radius:50%;background:var(--m);flex-shrink:0}
+.wc.ok .wd{background:var(--g)}.wc.busy .wd{background:var(--amb);animation:pu .7s infinite}
+@keyframes pu{0%,100%{opacity:1}50%{opacity:.2}}
+.info{background:var(--s);border:1px solid var(--b);border-radius:7px;padding:9px 13px;font-size:11px;color:var(--m);line-height:1.7;margin-bottom:12px}
+.info b{color:var(--t)}
+.ep{background:var(--c);border:1px solid var(--b);border-radius:12px;padding:14px 18px;margin-top:12px}
+.ep-hdr{display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap}
+.ep-title{font-size:11px;font-weight:700;letter-spacing:1px;text-transform:uppercase;color:var(--m)}
+textarea{background:var(--s);border:1px solid var(--b);border-radius:7px;color:var(--t);font-family:var(--fm);font-size:10px;padding:9px;width:100%;resize:vertical;outline:none;line-height:1.6}
+textarea:focus{border-color:var(--amb)}
+.mxscroll{max-height:240px;overflow-y:auto}
+</style>
+</head>
+<body>
+<div class="w">
+<div class="hdr">
+  <div><div class="logo">VENU CAST</div><div class="logo-sub">AI Forecast · v2.0</div></div>
+  <div id="hmeta" style="display:none;gap:7px;align-items:center;flex-wrap:wrap">
+    <div class="dvd"></div>
+    <span class="chip" id="cr"></span><span class="chip" id="cv"></span><span class="chip" id="cd"></span>
+  </div>
+  <div class="sp"></div>
+  <div id="hbtns" style="display:none;gap:6px;flex-wrap:wrap">
+    <button onclick="document.getElementById('fi').click()">↑ Re-import</button>
+    <button class="amb" onclick="openExport()">↓ Export CSV</button>
+  </div>
+</div>
+
+<div class="drop" id="dz" ondragover="event.preventDefault();this.classList.add('drag')" ondragleave="this.classList.remove('drag')" ondrop="onDrop(event)" onclick="document.getElementById('fi').click()">
+  <span class="ico">📊</span>
+  <div class="t1">Import Sales History CSV</div>
+  <div class="t2">Drop file or click to browse<br>
+    Required columns: <code>venue</code> · <code>date</code> · <code>sales</code> · <code>guests</code> · <code>average_transaction_value</code><br>
+    Date formats accepted: <code>DD/MM/YYYY</code> · <code>YYYY-MM-DD</code> · <code>MM/DD/YYYY</code>
+  </div>
+</div>
+<input id="fi" type="file" accept=".csv" style="display:none" onchange="onFI(this)">
+
+<div id="dash" style="display:none">
+  <div class="nav">
+    <button class="ntb on" onclick="nav('fc',this)">📈 Forecast</button>
+    <button class="ntb" onclick="nav('venues',this)">🗺 Venues</button>
+    <button class="ntb" onclick="nav('wx',this)">🌤 Weather & Events</button>
+  </div>
+
+  <div id="pfc">
+    <div class="ctrls">
+      <span class="lbl">Venue</span>
+      <select id="vsel" onchange="curV=this.value;render()"></select>
+      <span class="lbl">Metric</span>
+      <div class="pills" id="mp2">
+        <button class="pill on" onclick="setM('sales',this)">Sales</button>
+        <button class="pill" onclick="setM('guests',this)">Guests</button>
+        <button class="pill" onclick="setM('atv',this)">Avg Txn</button>
+      </div>
+      <span class="lbl">Forecast</span>
+      <input type="number" id="fcn" value="30" min="1" max="365" onchange="render()">
+      <div class="pills" id="up2">
+        <button class="pill on" onclick="setU('days',this)">Days</button>
+        <button class="pill" onclick="setU('months',this)">Months</button>
+      </div>
+    </div>
+    <div class="kgrid">
+      <div class="kc bl"><div class="kn">Total Sales</div><div class="kv" id="kts">—</div><div class="ks" id="kd">—</div></div>
+      <div class="kc bl"><div class="kn">Total Guests</div><div class="kv" id="kg">—</div><div class="ks">historical</div></div>
+      <div class="kc bl"><div class="kn">Avg Transaction</div><div class="kv" id="ka">—</div><div class="ks">per guest</div></div>
+      <div class="kc bl"><div class="kn">Daily Avg Sales</div><div class="kv" id="kda">—</div><div class="ks">per day</div></div>
+      <div class="kc ba"><div class="kn">Forecast Total</div><div class="kv" id="kf">—</div><div class="ks" id="kfn">—</div></div>
+    </div>
+    <div id="adjinfo" style="display:none" class="info"></div>
+    <div class="vtabs">
+      <button class="vtb on" onclick="sv('ch',this)">📈 Forecast Chart</button>
+      <button class="vtb" onclick="sv('dow',this)">📅 Day-of-Week</button>
+    </div>
+    <div id="vch">
+      <div class="cc">
+        <div class="chdr">
+          <span class="ct" id="cttl">Sales — historical & forecast</span>
+          <span class="bdg">HW Triple ES · m=7</span>
+          <span class="bdg b" id="adjbdg" style="display:none">Weather + Holiday adjusted</span>
+          <span class="bdg b">90% CI</span>
+          <div class="minfo" id="mi"></div>
+        </div>
+        <canvas id="mc" style="max-height:380px"></canvas>
+      </div>
+    </div>
+    <div id="vdow" style="display:none">
+      <div class="cc">
+        <div class="chdr"><span class="ct" id="dttl">Day-of-week pattern</span><span class="bdg b">avg</span></div>
+        <div class="dgrid" id="dg"></div>
+        <div style="margin-top:14px"><canvas id="dc" style="max-height:200px"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="pvenues" style="display:none">
+    <div class="info"><b>Map each venue to a city</b> for weather data, public holidays, and regional adjustments.<br>
+      <b>Holiday Mult:</b> sales multiplier on public holidays (1.1 = +10%). &nbsp;|&nbsp; <b>Temp Sensitivity:</b> response per °C deviation — leave blank to auto-estimate from your data.</div>
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Venue → City Mapping</span>
+        <span class="bdg g" id="autoDetect" style="display:none">Cities auto-detected</span>
+        <div class="sp"></div>
+        <button class="grn" onclick="fetchAll()">🌤 Fetch Weather &amp; Holidays</button>
+        <span id="fst" style="font-family:var(--fm);font-size:10px;color:var(--m);margin-left:6px"></span>
+      </div>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Venue</th><th>City</th><th>State</th><th>Country</th><th>Holiday Mult</th><th>Temp Sens</th><th>Records</th></tr></thead>
+        <tbody id="vtb2"></tbody>
+      </table></div>
+    </div>
+  </div>
+
+  <div id="pwx" style="display:none">
+    <div id="wrow" class="wrow"></div>
+    <div id="wxcc" class="cc" style="display:none">
+      <div class="chdr"><span class="ct">Max Temperature &amp; Precipitation</span><span class="bdg g">Open-Meteo API · historical + 16-day forecast</span></div>
+      <canvas id="wxc" style="max-height:190px"></canvas>
+    </div>
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Public Holidays</span>
+        <span class="bdg" id="hcount">0 loaded</span>
+        <span class="bdg b">Nager.Date API</span>
+      </div>
+      <div class="mxscroll"><table class="tbl">
+        <thead><tr><th>Date</th><th>Holiday</th><th>Country</th><th>Status</th></tr></thead>
+        <tbody id="htb"></tbody>
+      </table></div>
+    </div>
+    <div class="cc">
+      <div class="chdr">
+        <span class="ct">Custom Events &amp; Adjustments</span>
+        <div class="sp"></div>
+        <button onclick="addEv()">+ Add Event</button>
+      </div>
+      <div style="overflow-x:auto"><table class="tbl">
+        <thead><tr><th>Event Name</th><th>Date</th><th>Type</th><th>Impact %</th><th>Venue Filter</th><th></th></tr></thead>
+        <tbody id="etb"></tbody>
+      </table></div>
+      <button onclick="addEv()" style="margin-top:9px">+ Add Event</button>
+    </div>
+  </div>
+
+  <div id="ep" style="display:none">
+    <div class="ep">
+      <div class="ep-hdr">
+        <span class="ep-title">Export Forecast CSV</span>
+        <div class="sp"></div>
+        <button onclick="dlCsv()">↓ Download</button>
+        <button class="amb" onclick="copyCsv()">📋 Copy</button>
+        <span id="cpmsg" style="display:none;font-family:var(--fm);font-size:10px;color:var(--g)">✓ Copied!</span>
+        <button onclick="document.getElementById('ep').style.display='none'" style="padding:3px 8px">✕</button>
+      </div>
+      <div class="info" style="font-size:10px;margin-bottom:8px">
+        Columns: <code>venue</code> <code>date</code> <code>type</code> <code>sales</code> <code>guests</code> <code>atv</code> <code>forecast_value</code> <code>lower_90ci</code> <code>upper_90ci</code> <code>is_holiday</code> <code>temp_max_c</code> <code>adj_factor</code>
+      </div>
+      <textarea id="csvtxt" rows="8" readonly></textarea>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+var AR=[],VM={},WBC={},HS=new Set(),HD=[],EVS=[],
+    CM='sales',CU='days',curV='__all__',MC=null,DC=null,WC=null;
+var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+var ETYPES=['Public Holiday','School Holiday','Local Event','Sport','Festival','Conference','Custom'];
+var CITIES={
+  'Sydney':       {s:'NSW',cc:'AU',lat:-33.87,lon:151.21},
+  'Melbourne':    {s:'VIC',cc:'AU',lat:-37.81,lon:144.96},
+  'Brisbane':     {s:'QLD',cc:'AU',lat:-27.47,lon:153.02},
+  'Gold Coast':   {s:'QLD',cc:'AU',lat:-28.00,lon:153.43},
+  'Perth':        {s:'WA', cc:'AU',lat:-31.95,lon:115.86},
+  'Adelaide':     {s:'SA', cc:'AU',lat:-34.93,lon:138.60},
+  'Canberra':     {s:'ACT',cc:'AU',lat:-35.28,lon:149.13},
+  'Darwin':       {s:'NT', cc:'AU',lat:-12.46,lon:130.84},
+  'Hobart':       {s:'TAS',cc:'AU',lat:-42.88,lon:147.33},
+  'Sunshine Coast':{s:'QLD',cc:'AU',lat:-26.65,lon:153.07},
+  'Cairns':       {s:'QLD',cc:'AU',lat:-16.92,lon:145.77},
+  'Singapore':    {s:'SGP',cc:'SG',lat:1.35,  lon:103.82},
+  'London':       {s:'ENG',cc:'GB',lat:51.51, lon:-0.13},
+  'New York':     {s:'NY', cc:'US',lat:40.71, lon:-74.01},
+  'Houston':      {s:'TX', cc:'US',lat:29.76, lon:-95.37},
+  'Austin':       {s:'TX', cc:'US',lat:30.27, lon:-97.74},
+};
+function pd(s){if(!s)return null;s=String(s).trim().replace(/[""]/g,'');var m=s.match(/^(\d{4})[\/\-](\d{1,2})[\/\-](\d{1,2})$/);if(m)return new Date(+m[1],+m[2]-1,+m[3]);m=s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);if(m)return new Date(+m[3],+m[2]-1,+m[1]);var d=new Date(s);return isNaN(d)?null:d}
+function iso(d){return d.toISOString().slice(0,10)}
+function addD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
+function fd(s){if(!s)return'';var d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'2-digit'})}
+function fm(n,p){if(n==null||isNaN(n))return'—';p=p||'';if(Math.abs(n)>=1e6)return p+(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1e3)return p+(n/1e3).toFixed(1)+'K';return p+Math.round(n)}
+function avg(a){return a.length?a.reduce((s,v)=>s+v,0)/a.length:0}
+function stdev(a){var m=avg(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length)||1}
+function range(s,e){var a=[],d=new Date(s+'T00:00:00'),ed=new Date(e+'T00:00:00');while(d<=ed){a.push(iso(d));d=addD(d,1);}return a}
+function parseCSV(txt){
+  var ls=txt.trim().split(/\r?\n/).filter(l=>l.trim());if(ls.length<2)return[];
+  var raw=ls[0].split(',').map(h=>h.trim().replace(/[""]/g,''));
+  var nh=raw.map(h=>h.toLowerCase().replace(/[\s\-]+/g,'_').replace(/[^a-z0-9_]/g,''));
+  var fi=ks=>nh.findIndex(h=>ks.some(k=>h===k||h.includes(k)));
+  var iv=fi(['venue','location','store','site']),id=fi(['date','day','transaction_date','trading']),
+      is=fi(['sales','revenue','total_sales','gross']),ig=fi(['guests','covers','customers','transactions','pax']),
+      ia=fi(['average_transaction_value','atv','avg_transaction','avg_txn','avg_check']);
+  var rows=[];
+  for(var i=1;i<ls.length;i++){
+    var vs=ls[i].split(',').map(v=>v.trim().replace(/[""]/g,''));
+    var g=idx=>idx>=0?(vs[idx]||''):'';
+    var dt=pd(g(id));if(!dt||isNaN(dt))continue;
+    var s=parseFloat(g(is))||0,gu=parseFloat(g(ig))||0,at=parseFloat(g(ia))||0;
+    if(!at&&gu&&s)at=s/gu;
+    rows.push({venue:g(iv)||'Unknown',date:dt,dateStr:iso(dt),sales:s,guests:gu,atv:at,dow:dt.getDay()});
+  }
+  return rows.sort((a,b)=>a.date-b.date);
+}
+function linReg(y,h){var n=y.length,xm=(n-1)/2,ym=avg(y),num=0,den=0;for(var i=0;i<n;i++){num+=(i-xm)*(y[i]-ym);den+=(i-xm)**2}var sl=den?num/den:0,ic=ym-sl*xm;var fi=y.map((_,i)=>Math.max(0,ic+sl*i));var fc=Array.from({length:h},(_,i)=>Math.max(0,ic+sl*(n+i)));return{fitted:fi,forecast:fc,rmse:Math.sqrt(y.reduce((s,v,i)=>s+(v-fi[i])**2,0)/n)}}
+function hwCore(y,m,a,b,g){var n=y.length,L=y.slice(0,m).reduce((s,v)=>s+v,0)/m||1,T=0;for(var i=0;i<m;i++)T+=(y[m+i]-y[i])/(m*m);var S=y.slice(0,m).map(v=>L>0?v/L:1),fi=[];for(var t=0;t<n;t++){var si=t%m,pL=L;fi.push((L+T)*(S[si]||1));L=a*(y[t]/(S[si]||1))+(1-a)*(L+T);T=b*(L-pL)+(1-b)*T;S[si]=g*(y[t]/(L||1))+(1-g)*(S[si]||1);}return{L,T,S,fitted:fi}}
+function hwFc(y,m,a,b,g,h){if(!y||y.length<m*2)return linReg(y||[],h);var{L,T,S,fitted}=hwCore(y,m,a,b,g),n=y.length;var rmse=Math.sqrt(fitted.reduce((s,v,i)=>s+(v-y[i])**2,0)/n);var fc=Array.from({length:h},(_,i)=>Math.max(0,(L+(i+1)*T)*(S[(n+i)%m]||1)));return{fitted,forecast:fc,rmse}}
+function optimHW(y,m){if(!y||y.length<m*2)return{a:0.3,b:0.05,g:0.6};var best={a:0.3,b:0.05,g:0.6,rmse:Infinity};[0.1,0.3,0.5,0.7].forEach(a=>[0.01,0.05,0.15].forEach(b=>[0.2,0.5,0.7].forEach(g=>{try{var{rmse}=hwFc(y,m,a,b,g,1);if(isFinite(rmse)&&rmse<best.rmse)best={a,b,g,rmse}}catch(e){}})));return best}
+function getAgg(ven){ven=ven||curV;var src=ven==='__all__'?AR:AR.filter(r=>r.venue===ven),bd={};src.forEach(({dateStr,sales,guests,atv,dow})=>{if(!bd[dateStr])bd[dateStr]={sales:0,guests:0,atvS:0,atvN:0,dow};bd[dateStr].sales+=sales;bd[dateStr].guests+=guests;bd[dateStr].atvS+=atv;bd[dateStr].atvN++;});return Object.entries(bd).sort(([a],[b])=>a.localeCompare(b)).map(([ds,v])=>({dateStr:ds,sales:v.sales,guests:v.guests,atv:v.atvN?v.atvS/v.atvN:0,dow:v.dow}))}
+async function fetchWeather(lat,lon,start,end){var url=`https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lon}&start_date=${start}&end_date=${end}&daily=temperature_2m_max,precipitation_sum&timezone=auto`;var r=await fetch(url),d=await r.json(),out={};if(d.daily&&d.daily.time)d.daily.time.forEach((t,i)=>{out[t]={tMax:d.daily.temperature_2m_max[i],pr:d.daily.precipitation_sum[i]}});return out}
+async function fetchFcWeather(lat,lon){var url=`https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&daily=temperature_2m_max,precipitation_sum&forecast_days=16&timezone=auto`;var r=await fetch(url),d=await r.json(),out={};if(d.daily&&d.daily.time)d.daily.time.forEach((t,i)=>{out[t]={tMax:d.daily.temperature_2m_max[i],pr:d.daily.precipitation_sum[i]}});return out}
+async function fetchHols(years,cc){var all=[];for(var y of years){try{var r=await fetch(`https://date.nager.at/api/v3/PublicHolidays/${y}/${cc}`);if(r.ok){var d=await r.json();all=all.concat(d)}}catch(e){}}return all}
+async function fetchAll(){var venues=Object.keys(VM),cities=new Map();venues.forEach(v=>{var vm=VM[v];if(vm.city&&vm.lat&&!cities.has(vm.city))cities.set(vm.city,{lat:vm.lat,lon:vm.lon,cc:vm.cc||'AU'})});if(!cities.size){document.getElementById('fst').textContent='⚠ Map at least one city first';return}var agg=getAgg('__all__');var hs=agg[0]?.dateStr,he=agg[agg.length-1]?.dateStr;if(!hs){document.getElementById('fst').textContent='⚠ No data';return}document.getElementById('fst').textContent='Fetching weather…';for(var[city,{lat,lon,cc}]of cities){setWChip(city,'busy');try{var hist=await fetchWeather(lat,lon,hs,he);var fcwx=await fetchFcWeather(lat,lon);WBC[city]={...hist,...fcwx};setWChip(city,'ok',`${city} (${Object.keys(WBC[city]).length}d)`)}catch(e){setWChip(city,'err',`${city} ✕`)}}document.getElementById('fst').textContent='Fetching holidays…';var years=[...new Set(agg.map(r=>new Date(r.dateStr+'T00:00:00').getFullYear()))];years.push(new Date().getFullYear(),new Date().getFullYear()+1);years=[...new Set(years)];var ccs=[...new Set([...cities.values()].map(c=>c.cc))];for(var cc2 of ccs){var hols=await fetchHols(years,cc2);hols.forEach(h=>{if(!HS.has(h.date)){HS.add(h.date);HD.push({date:h.date,name:h.localName||h.name,cc:cc2})}})}HD.sort((a,b)=>a.date.localeCompare(b.date));document.getElementById('fst').textContent=`✓ ${cities.size} cities · ${HS.size} holidays`;renderHolTable();renderWxChart();render()}
+function setWChip(city,state,lbl){var row=document.getElementById('wrow');var el=row.querySelector(`[data-c="${city}"]`);if(!el){el=document.createElement('div');el.className='wc';el.dataset.c=city;el.innerHTML=`<span class="wd"></span><span></span>`;row.appendChild(el)}el.className='wc'+(state==='ok'?' ok':state==='busy'?' busy':'');el.querySelector('span:last-child').textContent=lbl||city}
+function getVMaps(ven){if(ven==='__all__')return Object.values(VM).filter(m=>m.city);return VM[ven]&&VM[ven].city?[VM[ven]]:[]}
+function getClimate(city){var byDOY={},wd=WBC[city]||{};Object.entries(wd).forEach(([ds,{tMax}])=>{if(tMax==null)return;var d=new Date(ds+'T00:00:00');var doy=Math.floor((d-new Date(d.getFullYear(),0,0))/86400000);if(!byDOY[doy])byDOY[doy]=[];byDOY[doy].push(tMax)});var r={};Object.entries(byDOY).forEach(([d,t])=>{r[d]=avg(t)});return r}
+function getDOY(ds){var d=new Date(ds+'T00:00:00');return Math.floor((d-new Date(d.getFullYear(),0,0))/86400000)}
+function getTempForDate(ds,vms){var ts=vms.map(vm=>{var wd=WBC[vm.city]||{},t=wd[ds]?.tMax;if(t==null){var cl=getClimate(vm.city);t=cl[getDOY(ds)]||null}return t}).filter(t=>t!=null);return ts.length?avg(ts):null}
+function estTempSens(agg,vms){if(!vms.length)return 0;var pairs=agg.map(r=>{var t=getTempForDate(r.dateStr,vms);return t!=null?{s:r.sales,t}:null}).filter(Boolean);if(pairs.length<14)return 0;var sx=pairs.map(p=>p.t),sy=pairs.map(p=>p.s),mx=avg(sx),my=avg(sy),stx=stdev(sx),sty=stdev(sy);var num=0;pairs.forEach(p=>num+=(p.t-mx)*(p.s-my));var r=num/(pairs.length*stx*sty);return Math.max(-0.4,Math.min(0.4,r*0.25))}
+function getAdj(ds,vms,ts,tstat){var factor=1,parts=[];if(vms.length&&ts!==0){var t=getTempForDate(ds,vms);if(t!=null){var dev=(t-tstat.mean)/tstat.std;var tf=Math.max(0.6,Math.min(1.8,1+ts*dev));factor*=tf;parts.push({label:'Temp',f:tf})}}if(HS.has(ds)){var hm=vms.length?avg(vms.map(vm=>parseFloat(vm.holidayMult||1.1))):1.1;factor*=hm;parts.push({label:'Holiday',f:hm})}EVS.forEach(ev=>{if(ev.date===ds&&(!ev.venueFilter||ev.venueFilter===curV||curV==='__all__')){var ef=1+(parseFloat(ev.impact)||0)/100;factor*=ef;parts.push({label:ev.name,f:ef})}});return{factor,parts}}
+function render(){
+  var agg=getAgg();if(!agg.length)return;
+  var fcN=Math.max(1,Math.min(365,+document.getElementById('fcn').value||30));
+  var fcDays=CU==='months'?fcN*30:fcN;
+  var M=7,series=agg.map(r=>r[CM]);
+  var{a,b,g}=optimHW(series,M);
+  var res=hwFc(series,M,a,b,g,fcDays);
+  var mv=avg(series)||1,cv=res.rmse/mv;
+  var lastD=new Date(agg[agg.length-1].dateStr+'T00:00:00');
+  var vms=getVMaps(curV),hasWx=vms.some(vm=>WBC[vm.city]);
+  var ts=0,tstat={mean:20,std:5};
+  if(hasWx){ts=estTempSens(agg,vms);var allT=agg.map(r=>getTempForDate(r.dateStr,vms)).filter(t=>t!=null);if(allT.length)tstat={mean:avg(allT),std:stdev(allT)}}
+  var fcPts=res.forecast.map((v,i)=>{var d=addD(lastD,i+1),ds=iso(d);var{factor}=getAdj(ds,vms,ts,tstat);var adj=v*factor;return{dateStr:ds,fc:v,adj,lo:Math.max(0,adj*(1-1.645*cv)),hi:adj*(1+1.645*cv),isHol:HS.has(ds),factor,t:getTempForDate(ds,vms)}});
+  var pfx=CM==='guests'?'':'$';
+  var mL={sales:'Sales ($)',guests:'Guests',atv:'Avg Txn ($)'};
+  var tS=agg.reduce((s,r)=>s+r.sales,0),tG=agg.reduce((s,r)=>s+r.guests,0);
+  var avgA=tG?tS/tG:avg(agg.map(r=>r.atv));
+  var fTot=fcPts.reduce((s,p)=>s+p.adj,0),fLo=fcPts.reduce((s,p)=>s+p.lo,0),fHi=fcPts.reduce((s,p)=>s+p.hi,0);
+  document.getElementById('kts').textContent=fm(tS,'$');
+  document.getElementById('kd').textContent=agg.length+' days history';
+  document.getElementById('kg').textContent=fm(tG);
+  document.getElementById('ka').textContent='$'+(avgA||0).toFixed(2);
+  document.getElementById('kda').textContent=fm(tS/agg.length,'$');
+  document.getElementById('kf').textContent=CM==='sales'||CM==='atv'?fm(fTot,'$'):fm(fTot);
+  document.getElementById('kfn').textContent=fcN+' '+CU+' · '+fm(fLo,pfx)+'–'+fm(fHi,pfx);
+  document.getElementById('cttl').textContent=mL[CM]+' — historical & forecast';
+  document.getElementById('dttl').textContent='Day-of-week avg '+CM.toLowerCase();
+  document.getElementById('mi').innerHTML=`<span class="mp">α=<b>${a.toFixed(2)}</b></span><span class="mp">β=<b>${b.toFixed(2)}</b></span><span class="mp">γ=<b>${g.toFixed(2)}</b></span><span class="mp">RMSE=<b>${res.rmse<1000?Math.round(res.rmse):fm(res.rmse)}</b></span>`;
+  document.getElementById('adjbdg').style.display=(hasWx||HS.size||EVS.length)?'':'none';
+  var ai=document.getElementById('adjinfo');
+  var hasAdj=hasWx||HS.size||EVS.length;
+  if(hasAdj){ai.style.display='';var pts2=[];if(hasWx)pts2.push(`<b>Temperature</b> (sensitivity=${ts.toFixed(3)})`);if(HS.size)pts2.push(`<b>${HS.size} public holidays</b>`);if(EVS.length)pts2.push(`<b>${EVS.length} custom events</b>`);var adjC=fcPts.filter(p=>Math.abs(p.factor-1)>0.01).length;ai.innerHTML=`<b>Adjustments active:</b> ${pts2.join(' · ')} — <span style="color:var(--t)">${adjC} of ${fcPts.length} forecast days adjusted</span>`}else ai.style.display='none';
+  var hL=agg.map(r=>r.dateStr),fL=fcPts.map(p=>p.dateStr),aL=[...hL,...fL];
+  var step=Math.max(1,Math.floor(aL.length/12));
+  var gc='rgba(255,255,255,0.06)',tc='rgba(197,205,232,0.5)';
+  var actD=aL.map(l=>{var f=agg.find(r=>r.dateStr===l);return f?f[CM]:null});
+  var fitD=aL.map((l,i)=>i<agg.length?res.fitted[i]:null);
+  var hwbD=aL.map(l=>{var p=fcPts.find(x=>x.dateStr===l);return p?p.fc:null});
+  var adjD=aL.map(l=>{var p=fcPts.find(x=>x.dateStr===l);return p?p.adj:null});
+  var hiD=aL.map(l=>{var p=fcPts.find(x=>x.dateStr===l);return p?p.hi:null});
+  var loD=aL.map(l=>{var p=fcPts.find(x=>x.dateStr===l);return p?p.lo:null});
+  var tD=null;
+  if(hasWx&&vms.length){tD=aL.map(ds=>getTempForDate(ds,vms));if(!tD.some(t=>t!=null))tD=null}
+  var hlPlugin={id:'hl',beforeDraw(chart){var ctx2=chart.ctx,ca=chart.chartArea,xs=chart.scales.x;if(!xs)return;ctx2.save();aL.forEach((l,i)=>{if(HS.has(l)){var px=xs.getPixelForValue(i);if(px<ca.left||px>ca.right)return;ctx2.beginPath();ctx2.strokeStyle='rgba(245,158,11,0.3)';ctx2.lineWidth=1;ctx2.setLineDash([2,3]);ctx2.moveTo(px,ca.top);ctx2.lineTo(px,ca.bottom);ctx2.stroke()}});var ni=hL.length-1;if(ni>=0){var px=xs.getPixelForValue(ni);ctx2.beginPath();ctx2.strokeStyle='rgba(197,205,232,0.2)';ctx2.lineWidth=1;ctx2.setLineDash([4,4]);ctx2.moveTo(px,ca.top);ctx2.lineTo(px,ca.bottom);ctx2.stroke();ctx2.fillStyle='rgba(197,205,232,0.4)';ctx2.font='10px DM Mono,monospace';ctx2.setLineDash([]);ctx2.fillText('Now',px+3,ca.top+13)}ctx2.restore()}};
+  var dsets=[
+    {label:'Upper CI',data:hiD,borderWidth:0,fill:'+1',backgroundColor:'rgba(245,158,11,0.1)',pointRadius:0,tension:.3,spanGaps:false,order:6,yAxisID:'y'},
+    {label:'Lower CI',data:loD,borderWidth:0,fill:false,pointRadius:0,tension:.3,spanGaps:false,order:7,yAxisID:'y'},
+    {label:'HW Baseline',data:hwbD,borderColor:'rgba(59,130,246,0.3)',borderWidth:1.5,borderDash:[5,4],fill:false,pointRadius:0,tension:.3,spanGaps:false,order:4,yAxisID:'y'},
+    {label:'Adj. Forecast',data:adjD,borderColor:'#f59e0b',borderWidth:2.5,borderDash:[8,4],fill:false,pointRadius:0,tension:.3,spanGaps:false,order:3,yAxisID:'y'},
+    {label:'Fitted',data:fitD,borderColor:'rgba(59,130,246,0.38)',borderWidth:1.2,borderDash:[3,3],fill:false,pointRadius:0,tension:.3,spanGaps:false,order:2,yAxisID:'y'},
+    {label:'Actual',data:actD,borderColor:'#3b82f6',borderWidth:2,fill:false,pointRadius:0,tension:.3,spanGaps:false,order:1,yAxisID:'y'},
+  ];
+  if(tD)dsets.push({label:'Temp °C',data:tD,borderColor:'rgba(52,211,153,0.65)',borderWidth:1.5,fill:true,backgroundColor:'rgba(52,211,153,0.05)',pointRadius:0,tension:.4,spanGaps:true,order:8,yAxisID:'yT',borderDash:[2,2]});
+  if(MC)MC.destroy();
+  var ctx3=document.getElementById('mc').getContext('2d');
+  var scales={x:{grid:{color:gc},ticks:{color:tc,font:{size:9,family:'DM Mono,monospace'},maxTicksLimit:12,callback:(v,i)=>i%step===0?fd(aL[i]):''}},y:{grid:{color:gc},ticks:{color:tc,font:{size:9,family:'DM Mono,monospace'},callback:v=>CM!=='guests'?'$'+(v>=1000?(v/1000).toFixed(0)+'k':v):v}}};
+  if(tD)scales.yT={position:'right',grid:{display:false},ticks:{color:'rgba(52,211,153,0.6)',font:{size:9},callback:v=>v+'°'}};
+  MC=new Chart(ctx3,{type:'line',data:{labels:aL,datasets:dsets},plugins:[hlPlugin],options:{responsive:true,animation:{duration:350},interaction:{mode:'index',intersect:false},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:18,font:{size:9,family:'DM Mono,monospace'},color:tc,padding:10,filter:i=>!['Upper CI','Lower CI'].includes(i.text)}},tooltip:{callbacks:{title:([i])=>fd(i.label)+(HS.has(i.label)?' 🎉 Holiday':''),label:i=>{var v=i.raw;if(v==null||['Upper CI','Lower CI'].includes(i.dataset.label))return null;var p=i.dataset.label==='Temp °C'?'':CM!=='guests'?'$':'';return`${i.dataset.label}: ${p}${v.toFixed(CM==='guests'?0:2)}${i.dataset.label==='Temp °C'?'°C':''}`}}}},scales}});
+  var acc=Array.from({length:7},()=>({sum:0,n:0}));
+  agg.forEach(r=>{acc[r.dow].sum+=r[CM];acc[r.dow].n++});
+  var dov=acc.map((a,i)=>({day:DOW[i],avg:a.n?a.sum/a.n:0,n:a.n}));
+  var mxD=Math.max(...dov.map(d=>d.avg),1);
+  document.getElementById('dg').innerHTML=dov.map(d=>`<div class="dcell"><div class="ddl">${d.day}</div><div class="dv${d.avg===mxD?' hi':''}">${CM!=='guests'?'$':''}${d.avg>=1000?(d.avg/1000).toFixed(1)+'k':Math.round(d.avg)}</div><div class="dbar"><div class="dfill" style="width:${(d.avg/mxD*100).toFixed(0)}%"></div></div><div style="font-size:8px;color:var(--m);font-family:var(--fm);margin-top:3px">${d.n}d</div></div>`).join('');
+  if(DC)DC.destroy();
+  var dc2=document.getElementById('dc').getContext('2d');
+  DC=new Chart(dc2,{type:'bar',data:{labels:dov.map(d=>d.day),datasets:[{label:'Avg',data:dov.map(d=>d.avg),backgroundColor:dov.map(d=>d.avg===mxD?'#f59e0b':'rgba(59,130,246,0.65)'),borderRadius:4}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:false},tooltip:{callbacks:{label:i=>CM!=='guests'?'$'+i.raw.toFixed(2):i.raw.toFixed(0)}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:11}}},y:{grid:{color:gc},ticks:{color:tc,font:{size:10},callback:v=>CM!=='guests'?'$'+(v>=1000?(v/1000).toFixed(0)+'k':v):v}}}}});
+}
+function renderVT(){var venues=[...new Set(AR.map(r=>r.venue))].sort();var cnts={};AR.forEach(r=>{cnts[r.venue]=(cnts[r.venue]||0)+1});var cityOpts=`<option value="">— Select city —</option>`+Object.keys(CITIES).map(c=>`<option>${c}</option>`).join('');document.getElementById('vtb2').innerHTML=venues.map(v=>{var vm=VM[v]||{},key=v.replace(/[^a-z0-9]/gi,'_');return`<tr><td style="font-weight:700;color:#dde1f5">${v}</td><td><select onchange="updVM('${v}','city',this.value)" style="width:135px">${cityOpts.replace(new RegExp(`>${vm.city||'NOMATCH'}<`),' selected>'+(vm.city||'')+'<')}</select></td><td id="vs${key}" style="color:var(--m)">${vm.state||'—'}</td><td id="vc${key}" style="color:var(--m)">${vm.cc||'—'}</td><td><input type="number" value="${vm.holidayMult||1.1}" step="0.05" min="0.5" max="3" onchange="updVM('${v}','holidayMult',+this.value)" style="width:55px"></td><td><input type="number" value="${vm.tempSens!=null?vm.tempSens:''}" step="0.05" min="-0.5" max="0.5" placeholder="Auto" onchange="updVM('${v}','tempSens',this.value?+this.value:null)" style="width:65px"></td><td style="color:var(--m)">${cnts[v]||0}</td></tr>`}).join('')}
+function updVM(v,f,val){if(!VM[v])VM[v]={holidayMult:1.1,tempSens:null};if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k=v.replace(/[^a-z0-9]/gi,'_');var vs=document.getElementById('vs'+k),vc=document.getElementById('vc'+k);if(vs)vs.textContent=VM[v].state||'—';if(vc)vc.textContent=VM[v].cc||'—'}else VM[v][f]=val;render()}
+function renderWxChart(){var vms=getVMaps('__all__');if(!vms.some(vm=>WBC[vm.city]))return;var agg=getAgg('__all__'),hs=agg[0]?.dateStr;if(!hs)return;var end=iso(addD(new Date(),17));var dates=range(hs,end);var temps=dates.map(d=>{var ts=vms.map(vm=>WBC[vm.city]?.[d]?.tMax).filter(t=>t!=null);return ts.length?avg(ts):null});var pr=dates.map(d=>{var ps=vms.map(vm=>WBC[vm.city]?.[d]?.pr).filter(p=>p!=null);return ps.length?avg(ps):null});if(!temps.some(t=>t!=null))return;document.getElementById('wxcc').style.display='';var step=Math.max(1,Math.floor(dates.length/12));var gc='rgba(255,255,255,0.06)',tc='rgba(197,205,232,0.5)';if(WC)WC.destroy();var ctx4=document.getElementById('wxc').getContext('2d');WC=new Chart(ctx4,{type:'bar',data:{labels:dates,datasets:[{label:'Precip (mm)',data:pr,backgroundColor:'rgba(59,130,246,0.3)',borderColor:'rgba(59,130,246,0.5)',borderWidth:1,type:'bar',yAxisID:'yp',order:2},{label:'Max Temp (°C)',data:temps,borderColor:'#34d399',borderWidth:2,fill:true,backgroundColor:'rgba(52,211,153,0.07)',pointRadius:0,tension:.4,spanGaps:true,type:'line',yAxisID:'yt',order:1}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:14,font:{size:9},color:tc,padding:8}},tooltip:{callbacks:{title:([i])=>fd(i.label),label:i=>`${i.dataset.label}: ${i.raw!=null?i.raw.toFixed(1):'—'}${i.dataset.label.includes('°C')?'°C':'mm'}`}}},scales:{x:{grid:{color:gc},ticks:{color:tc,font:{size:9},maxTicksLimit:12,callback:(v,i)=>i%step===0?fd(dates[i]):''}},yt:{grid:{color:gc},ticks:{color:'rgba(52,211,153,0.6)',font:{size:9},callback:v=>v+'°'},position:'left'},yp:{grid:{display:false},ticks:{color:'rgba(59,130,246,0.6)',font:{size:9},callback:v=>v+'mm'},position:'right'}}}})}
+function renderHolTable(){var today=iso(new Date());document.getElementById('htb').innerHTML=HD.map(h=>`<tr><td>${fd(h.date)} <span style="color:var(--m);font-size:9px">${h.date}</span></td><td>${h.name}</td><td>${h.cc}</td><td>${h.date>=today?'<span class="bdg g">Upcoming</span>':'<span style="color:var(--m);font-size:10px">Past</span>'}</td></tr>`).join('')||'<tr><td colspan="4" style="text-align:center;color:var(--m);padding:18px">No holidays loaded — map venues to cities, then click Fetch Weather &amp; Holidays</td></tr>';document.getElementById('hcount').textContent=HD.length+' loaded'}
+function renderET(){var venues=Object.keys(VM);document.getElementById('etb').innerHTML=EVS.length?EVS.map((ev,i)=>`<tr><td><input type="text" value="${ev.name}" onchange="EVS[${i}].name=this.value;render()" style="width:130px"></td><td><input type="date" value="${ev.date}" onchange="EVS[${i}].date=this.value;render()"></td><td><select onchange="EVS[${i}].type=this.value">${ETYPES.map(t=>`<option${t===ev.type?' selected':''}>${t}</option>`).join('')}</select></td><td><input type="number" value="${ev.impact}" onchange="EVS[${i}].impact=+this.value;render()" style="width:55px"> %</td><td><select onchange="EVS[${i}].venueFilter=this.value"><option value="">All</option>${venues.map(v=>`<option value="${v}"${v===ev.venueFilter?' selected':''}>${v}</option>`).join('')}</select></td><td><button onclick="EVS.splice(${i},1);renderET();render()" style="padding:2px 7px;color:var(--r);border-color:#7f1d1d">✕</button></td></tr>`).join(''):'<tr><td colspan="6" style="text-align:center;color:var(--m);padding:18px">No events added yet.</td></tr>'}
+function addEv(){EVS.push({name:'New Event',date:iso(new Date()),type:'Custom',impact:10,venueFilter:''});renderET();render()}
+function buildCSV(){var agg=getAgg();var fcN=+document.getElementById('fcn').value||30,fcDays=CU==='months'?fcN*30:fcN;var M=7,series=agg.map(r=>r[CM]);var{a,b,g}=optimHW(series,M);var res=hwFc(series,M,a,b,g,fcDays);var mv=avg(series)||1,cv=res.rmse/mv;var lastD=new Date(agg[agg.length-1].dateStr+'T00:00:00');var vms=getVMaps(curV),hasWx=vms.some(vm=>WBC[vm.city]);var ts=hasWx?estTempSens(agg,vms):0;var allT=agg.map(r=>getTempForDate(r.dateStr,vms)).filter(t=>t!=null);var tstat={mean:allT.length?avg(allT):20,std:allT.length?stdev(allT):5};var vL=curV==='__all__'?'All Venues':curV;var lines=['venue,date,type,sales,guests,atv,forecast_value,lower_90ci,upper_90ci,is_holiday,temp_max_c,adj_factor'];agg.forEach(r=>{var t=getTempForDate(r.dateStr,vms);lines.push([vL,r.dateStr,'historical',r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),'','','',HS.has(r.dateStr)?'1':'0',t!=null?t.toFixed(1):'','1.000'].join(','))});res.forecast.forEach((v,i)=>{var d=addD(lastD,i+1),ds=iso(d);var{factor}=getAdj(ds,vms,ts,tstat);var adj=v*factor,lo=Math.max(0,adj*(1-1.645*cv)),hi=adj*(1+1.645*cv);var t=getTempForDate(ds,vms);lines.push([vL,ds,'forecast','','','',adj.toFixed(2),lo.toFixed(2),hi.toFixed(2),HS.has(ds)?'1':'0',t!=null?t.toFixed(1):'',factor.toFixed(3)].join(','))});return lines.join('\n')}
+function openExport(){var csv=buildCSV();document.getElementById('csvtxt').value=csv;var ep=document.getElementById('ep');ep.style.display='';ep.scrollIntoView({behavior:'smooth'});try{var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});var url=URL.createObjectURL(blob);var a=document.createElement('a');a.href=url;a.download=`forecast_${(curV==='__all__'?'all_venues':curV).replace(/[^a-z0-9]/gi,'_')}_${iso(new Date())}.csv`;document.body.appendChild(a);a.click();document.body.removeChild(a);setTimeout(()=>URL.revokeObjectURL(url),1000)}catch(e){}}
+function copyCsv(){var t=document.getElementById('csvtxt');t.select();try{document.execCommand('copy')}catch(e){navigator.clipboard?.writeText(t.value).catch(()=>{})}var m=document.getElementById('cpmsg');m.style.display='inline';setTimeout(()=>m.style.display='none',2200)}
+function dlCsv(){var csv=document.getElementById('csvtxt').value;var uri='data:text/csv;charset=utf-8,'+encodeURIComponent(csv);var a=document.createElement('a');a.href=uri;a.download=`forecast_${iso(new Date())}.csv`;document.body.appendChild(a);a.click();document.body.removeChild(a)}
+function loadData(rows){AR=rows;var venues=[...new Set(rows.map(r=>r.venue))].sort();venues.forEach(v=>{if(!VM[v])VM[v]={holidayMult:1.1,tempSens:null}});var detected=0;venues.forEach(v=>{if(!VM[v].city){for(var city of Object.keys(CITIES)){if(v.toLowerCase().includes(city.toLowerCase())){Object.assign(VM[v],{city,state:CITIES[city].s,cc:CITIES[city].cc,lat:CITIES[city].lat,lon:CITIES[city].lon});detected++;break}}}});var sel=document.getElementById('vsel');sel.innerHTML='<option value="__all__">All Venues</option>'+venues.map(v=>`<option value="${v}">${v}</option>`).join('');curV='__all__';document.getElementById('cr').innerHTML='<b>'+rows.length.toLocaleString()+'</b> records';document.getElementById('cv').innerHTML='<b>'+venues.length+'</b> venues';document.getElementById('cd').innerHTML='<b>'+fd(rows[0]?.dateStr)+'</b> → <b>'+fd(rows[rows.length-1]?.dateStr)+'</b>';document.getElementById('hmeta').style.display='flex';document.getElementById('hbtns').style.display='flex';document.getElementById('dz').style.display='none';document.getElementById('dash').style.display='';if(detected>0){var ad=document.getElementById('autoDetect');ad.style.display='';ad.textContent=`${detected} cities auto-detected`}render();renderVT();renderET();renderHolTable()}
+function nav(p,btn){document.querySelectorAll('.ntb').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');['pfc','pvenues','pwx'].forEach(id=>document.getElementById(id).style.display='none');document.getElementById('p'+p).style.display='';if(p==='venues')renderVT();if(p==='wx'){renderET();renderHolTable()}}
+function sv(v,btn){document.querySelectorAll('.vtb').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');document.getElementById('vch').style.display=v==='ch'?'':'none';document.getElementById('vdow').style.display=v==='dow'?'':'none'}
+function setM(m,btn){CM=m;document.querySelectorAll('#mp2 .pill').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');render()}
+function setU(u,btn){CU=u;document.querySelectorAll('#up2 .pill').forEach(b=>b.classList.remove('on'));if(btn)btn.classList.add('on');render()}
+function onDrop(ev){ev.preventDefault();document.getElementById('dz').classList.remove('drag');var f=ev.dataTransfer.files[0];if(f)readF(f)}
+function onFI(inp){if(inp.files[0])readF(inp.files[0])}
+function readF(f){var r=new FileReader();r.onload=e=>loadData(parseCSV(e.target.result));r.readAsText(f)}
+</script>
+</body>
+</html>
