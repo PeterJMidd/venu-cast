@@ -436,8 +436,35 @@ async function runForecast(){
   if(!url){setSt('fcSt','err','⚠ No API URL set — enter your Render URL above and click Test.');renderHWFallback(agg,fcDays,lastD,vms,ts,tstat);return;}
   if(fcRunning)return;
   fcRunning=true;document.getElementById('runBtn').disabled=true;
-  setSt('fcSt','busy','<span class="spin">⚙</span>&nbsp;Running forecast ('+fcDays+' days)… Prophet may take 20–40s on first run.');
+
   try{
+    // ── ALL VENUES: run Prophet independently per venue then sum ─────────────
+    if(CRV==='__all__'){
+      try{
+        await runForecastMulti(fcDays,url);
+        var res2=fcResultByVenue['__all__'];
+        if(!res2)throw new Error('No multi-venue result');
+        lastFcResult=res2;
+        var d2=res2.d,adjFc2=res2.adjFc;
+        setSt('fcSt','ok','✓ '+d2.model+' &nbsp;|&nbsp; avg RMSE='+d2.rmse?.toFixed(2)+'  &nbsp;<span class="bdg g">Per-venue forecasts</span>');
+        document.getElementById('mBdg').textContent=d2.model;
+        document.getElementById('mInfo').innerHTML='<span class="mp">avg RMSE=<b>'+(d2.rmse||0).toFixed(2)+'</b></span><span class="mp">per venue</span>';
+        var fTot2=adjFc2.reduce((s,p)=>s+p.fc,0),fLo2=adjFc2.reduce((s,p)=>s+p.lo,0),fHi2=adjFc2.reduce((s,p)=>s+p.hi,0);
+        var pfx2=CM==='guests'?'':'$';
+        document.getElementById('kF').textContent=CM==='guests'?fm(fTot2):fm(fTot2,'$');
+        document.getElementById('kFN').textContent=fcNval+' '+CU+' · '+fm(fLo2,pfx2)+'–'+fm(fHi2,pfx2)+' 90%CI';
+        document.getElementById('adjBdg').style.display='none';
+        document.getElementById('adjInfo').style.display='none';
+        drawMainChart(res2.agg,d2,adjFc2,res2.vms);drawDOW(res2.agg);
+        return;
+      }catch(e2){
+        setSt('fcSt','err','✕ Multi-venue forecast failed: '+e2.message+'. Falling back to aggregated forecast.');
+        // fall through to single aggregated forecast below
+      }
+    }
+
+    // ── SINGLE VENUE (or fallback): run forecast on aggregated data ──────────
+    setSt('fcSt','busy','<span class="spin">⚙</span>&nbsp;Running forecast ('+fcDays+' days)… Prophet may take 20–40s on first run.');
     var res=await fetch(url+'/forecast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dates:agg.map(r=>r.dateStr),values:agg.map(r=>r[CM]),forecast_days:fcDays,holiday_dates:[...HS],weather_map:wxFlat}),signal:AbortSignal.timeout(90000)});
     var d=await res.json();if(d.error)throw new Error(d.error);
     var adjFc=d.forecast.map((v,i)=>{var ds=d.forecast_dates[i],adj=getAdj(ds,vms,ts,tstat);return{fc:v*adj,lo:(d.lower_90[i]||v)*adj,hi:(d.upper_90[i]||v)*adj,adj,ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}});
@@ -664,24 +691,62 @@ function openExport(){
   venues.forEach(ven=>{venueDOWShare[ven]={};for(var dow=0;dow<7;dow++){var vd=AR.filter(r=>r.venue===ven&&r.dow===dow).reduce((s,r)=>s+r.sales,0);venueDOWShare[ven][dow]=vd/dowTotals[dow];}});
   var venueRatios={};
   venues.forEach(ven=>{var vRows=AR.filter(r=>r.venue===ven),vS=vRows.reduce((s,r)=>s+r.sales,0)||1,vG=vRows.reduce((s,r)=>s+r.guests,0),vA=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;venueRatios[ven]={gRatio:vG/vS,avgAtv:vA};});
-  var res=fcResultByVenue['__all__'];
-  if(!res||!res.d||!res.d.forecast_dates){alert('Please select "All Venues (combined)", click Run Forecast, then export.');return;}
-  var d=res.d,adjFc=res.adjFc,model=d.model||'';
-  var header='venue,date,dow,type,sales,guests,atv,forecast_sales,lower_90,upper_90,forecast_guests,forecast_atv,is_holiday,holiday_name,temp_max_c,adj_factor,model';
+  // ── Check we have per-venue forecasts ──────────────────────────────────────
+  // If multi-venue forecast was run, use each venue's own Prophet result directly.
+  // If not, fall back to proportional split from __all__.
+  var hasPerVenue=venues.every(ven=>fcResultByVenue[ven]&&fcResultByVenue[ven].d&&fcResultByVenue[ven].d.forecast_dates);
+  var allRes=fcResultByVenue['__all__'];
+
+  if(!hasPerVenue&&(!allRes||!allRes.d||!allRes.d.forecast_dates)){
+    alert('Please select "All Venues (combined)", click ▶ Run Forecast, then export.');return;
+  }
+
+  var header='venue,date,dow,type,sales,guests,atv,forecast_sales,lower_90,upper_90,forecast_guests,forecast_atv,is_holiday,holiday_name,temp_max_c,adj_factor,model,forecast_method';
   var lines=[header];
-  AR.forEach(r=>{var holName=HD.find(h=>h.date===r.dateStr)?.name||'',vms=getVMs(r.venue),t=getTempForDate(r.dateStr,vms);lines.push(['"'+esc(r.venue)+'"',r.dateStr,DOW[r.dow],'historical',r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),'','','','','',HS.has(r.dateStr)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'','1.000',''].join(','));});
-  d.forecast_dates.forEach((ds,i)=>{
-    var p=adjFc[i]||{},totalFcS=p.fc||0,totalFcLo=p.lo||0,totalFcHi=p.hi||0;
-    var dow=new Date(ds+'T00:00:00').getDay(),holName=HD.find(h=>h.date===ds)?.name||'';
-    var shareSum=venues.reduce((s,ven)=>{var sh=venueDOWShare[ven]?.[dow];return s+(sh>0?sh:venueAvgShare[ven]);},0)||1;
-    venues.forEach(ven=>{
-      var rawShare=venueDOWShare[ven]?.[dow],share=(rawShare>0?rawShare:venueAvgShare[ven])/shareSum;
-      var fcS=totalFcS*share,fcLo=totalFcLo*share,fcHi=totalFcHi*share;
-      var fcG=fcS*(venueRatios[ven]?.gRatio||0),fcA=venueRatios[ven]?.avgAtv||0;
-      var vms=getVMs(ven),t=getTempForDate(ds,vms);
-      lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(model)+'"'].join(','));
-    });
+
+  // ── Historical rows — one per venue per date ──────────────────────────────
+  AR.forEach(r=>{
+    var holName=HD.find(h=>h.date===r.dateStr)?.name||'',vms=getVMs(r.venue),t=getTempForDate(r.dateStr,vms);
+    lines.push(['"'+esc(r.venue)+'"',r.dateStr,DOW[r.dow],'historical',r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),'','','','','',HS.has(r.dateStr)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'','1.000','','actual'].join(','));
   });
+
+  // ── Forecast rows ─────────────────────────────────────────────────────────
+  if(hasPerVenue){
+    // ✅ BEST: each venue has its own Prophet forecast — use directly, no splitting
+    venues.forEach(ven=>{
+      var vRes=fcResultByVenue[ven];
+      var vd=vRes.d,vadjFc=vRes.adjFc,vmodel=vd.model||'';
+      var vRows=AR.filter(r=>r.venue===ven);
+      var vS=vRows.reduce((s,r)=>s+r.sales,0)||1;
+      var gRatio=vRows.reduce((s,r)=>s+r.guests,0)/vS;
+      var avgAtv=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;
+      var vms=getVMs(ven);
+      vd.forecast_dates.forEach((ds,i)=>{
+        var p=vadjFc[i]||{};
+        var fcS=p.fc||0,fcLo=p.lo||0,fcHi=p.hi||0;
+        var fcG=fcS*gRatio,fcA=avgAtv;
+        var dow=new Date(ds+'T00:00:00').getDay();
+        var holName=HD.find(h=>h.date===ds)?.name||'';
+        var t=getTempForDate(ds,vms);
+        lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(vmodel)+'"','per-venue Prophet'].join(','));
+      });
+    });
+  } else {
+    // ⚠ FALLBACK: proportional split from __all__ forecast
+    var d=allRes.d,adjFc=allRes.adjFc,model=d.model||'';
+    d.forecast_dates.forEach((ds,i)=>{
+      var p=adjFc[i]||{},totalFcS=p.fc||0,totalFcLo=p.lo||0,totalFcHi=p.hi||0;
+      var dow=new Date(ds+'T00:00:00').getDay(),holName=HD.find(h=>h.date===ds)?.name||'';
+      var shareSum=venues.reduce((s,ven)=>{var sh=venueDOWShare[ven]?.[dow];return s+(sh>0?sh:venueAvgShare[ven]);},0)||1;
+      venues.forEach(ven=>{
+        var rawShare=venueDOWShare[ven]?.[dow],share=(rawShare>0?rawShare:venueAvgShare[ven])/shareSum;
+        var fcS=totalFcS*share,fcLo=totalFcLo*share,fcHi=totalFcHi*share;
+        var fcG=fcS*(venueRatios[ven]?.gRatio||0),fcA=venueRatios[ven]?.avgAtv||0;
+        var vms=getVMs(ven),t=getTempForDate(ds,vms);
+        lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(model)+'"','proportional split'].join(','));
+      });
+    });
+  }
   var csv=lines.join('\n');
   document.getElementById('csvTxt').value=csv;
   document.getElementById('epScope').textContent=venues.length+' venues · '+d.forecast_dates.length+' forecast days · '+(lines.length-1)+' rows';
