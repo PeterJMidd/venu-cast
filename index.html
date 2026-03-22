@@ -225,7 +225,7 @@ textarea:focus{border-color:var(--amb)}
       </div>
       <div style="overflow-x:auto">
         <table class="tbl">
-          <thead><tr><th>Venue</th><th>City</th><th>State</th><th>Country</th><th>Lat</th><th>Lon</th><th>Holiday Mult</th><th>Temp Sens</th><th>Monthly Multipliers (Jan-Dec)</th><th>Records</th></tr></thead>
+          <thead><tr><th>Venue</th><th>City</th><th>State</th><th>Country</th><th>Hol Mult</th><th>Temp Sens</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th><th>Jul</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th><th>Jul</th><th>Aug</th><th>Sep</th><th>Oct</th><th>Nov</th><th>Dec</th><th>Rec</th></tr></thead>
           <tbody id="vTbd"></tbody>
         </table>
       </div>
@@ -779,17 +779,36 @@ function setWChip(city,state,lbl){
 }
 
 function renderVT(){
-  var venues=[...new Set(AR.map(r=>r.venue))].sort(),cnts={};
-  AR.forEach(r=>{cnts[r.venue]=(cnts[r.venue]||0)+1});
-  var cityOpts='<option value="">n/a Select city n/a</option>'+Object.keys(CITIES).map(c=>'<option value="'+c+'">'+c+'</option>').join('');
-  document.getElementById('vTbd').innerHTML=venues.map(v=>{
+  var venues=[...new Set(AR.map(r=>r.venue))].sort();
+  var cnts={};AR.forEach(r=>{cnts[r.venue]=(cnts[r.venue]||0)+1});
+  var cityOpts='<option value="">— Select city —</option>'+Object.keys(CITIES).map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  document.getElementById('vTbd').innerHTML=venues.map(function(v){
     var vm=VM[v]||{},key='vm_'+v.replace(/[^a-z0-9]/gi,'_');
     var opts=cityOpts.replace('value="'+(vm.city||'XXXX')+'"','value="'+(vm.city||'')+'" selected');
-    var mthDisplay=vm.mthMults&&vm.mthMults.length===12?vm.mthMults.map(function(m){return m.toFixed(2);}).join(', '):'not set';
-    return '<tr><td style="font-weight:700;color:#dde1f5;white-space:nowrap">'+v+'</td><td><select id="'+key+'_city" onchange="updVM(\''+v+'\',\'city\',this.value)" style="width:130px">'+opts+'</select></td><td id="'+key+'_s" style="color:var(--m)">'+(vm.state||'n/a')+'</td><td id="'+key+'_cc" style="color:var(--m)">'+(vm.cc||'n/a')+'</td><td id="'+key+'_lat" style="color:var(--m)">'+(vm.lat?vm.lat.toFixed(4):'n/a')+'</td><td id="'+key+'_lon" style="color:var(--m)">'+(vm.lon?vm.lon.toFixed(4):'n/a')+'</td><td><input type="number" value="'+(vm.holidayMult||1.10)+'" step="0.05" min="0.5" max="3" onchange="updVM(\''+v+'\',\'holidayMult\',+this.value)" style="width:55px"></td><td><input type="number" value="'+(vm.tempSens!=null?vm.tempSens:'')+'" step="0.01" min="-0.5" max="0.5" placeholder="Auto" onchange="updVM(\''+v+'\',\'tempSens\',this.value?+this.value:null)" style="width:65px"></td><td style="color:var(--m)">'+'</td><td style="color:var(--m);font-size:9px;font-family:var(--fm)">'+mthDisplay+'</td><td style="color:var(--m)">'+( cnts[v]||0)+'</td></tr>';
+    // Build 12 month input cells
+    var mthCells='';
+    for(var mi=0;mi<12;mi++){
+      var mv=vm.mthMults&&vm.mthMults[mi]!=null?vm.mthMults[mi].toFixed(2):'1.00';
+      mthCells+='<td><input type="number" value="'+mv+'" step="0.05" min="0" max="5" onchange="updVMMth(\''+v+'\','+mi+',+this.value)" style="width:48px"></td>';
+    }
+    return '<tr>'
+      +'<td style="font-weight:700;color:#dde1f5;white-space:nowrap;font-size:10px">'+v+'</td>'
+      +'<td><select id="'+key+'_city" onchange="updVM(\''+v+'\',\'city\',this.value)" style="width:120px">'+opts+'</select></td>'
+      +'<td id="'+key+'_s" style="color:var(--m)">'+(vm.state||'—')+'</td>'
+      +'<td id="'+key+'_cc" style="color:var(--m)">'+(vm.cc||'—')+'</td>'
+      +'<td><input type="number" value="'+(vm.holidayMult||1.10)+'" step="0.05" min="0.5" max="3" onchange="updVM(\''+v+'\',\'holidayMult\',+this.value)" style="width:50px"></td>'
+      +'<td><input type="number" value="'+(vm.tempSens!=null?vm.tempSens:'')+'" step="0.01" min="-0.5" max="0.5" placeholder="Auto" onchange="updVM(\''+v+'\',\'tempSens\',this.value?+this.value:null)" style="width:55px"></td>'
+      +mthCells
+      +'<td style="color:var(--m)">'+(cnts[v]||0)+'</td>'
+      +'</tr>';
   }).join('');
 }
 
+function updVMMth(v,mIdx,val){
+  if(!VM[v])VM[v]={holidayMult:1.10,tempSens:null};
+  if(!VM[v].mthMults||VM[v].mthMults.length!==12)VM[v].mthMults=[1,1,1,1,1,1,1,1,1,1,1,1];
+  VM[v].mthMults[mIdx]=val||1;
+}
 function updVM(v,f,val){
   if(!VM[v])VM[v]={holidayMult:1.10,tempSens:null};
   if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k='vm_'+v.replace(/[^a-z0-9]/gi,'_');['s','cc','lat','lon'].forEach(f2=>{var el=document.getElementById(k+'_'+f2);if(el)el.textContent=f2==='s'?(VM[v].state||'n/a'):f2==='cc'?(VM[v].cc||'n/a'):f2==='lat'?(VM[v].lat?VM[v].lat.toFixed(4):'n/a'):(VM[v].lon?VM[v].lon.toFixed(4):'n/a')});}else VM[v][f]=val;
