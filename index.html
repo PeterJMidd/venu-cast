@@ -300,6 +300,7 @@ textarea:focus{border-color:var(--amb)}
 var AR=[],VM={},WBC={},HS=new Set(),HD=[],EVS=[];
 var CM='sales',CU='days',CRV='__all__';
 var fcResultByVenue={},lastFcResult=null;
+var VM_MULTS={};
 var MC=null,DC=null,WXC=null,compCharts=[];
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var ETYPES=['Public Holiday','School Holiday','Local Event','Sport','Festival','Conference','Custom'];
@@ -412,6 +413,7 @@ function getAdj(ds,vms,ts,tstat){
 }
 
 
+function getVenueMonthMult(ven,ds){var m=VM_MULTS[ven];if(!m||!m.length)return 1;var mo=new Date(ds+'T00:00:00').getMonth();var v=parseFloat(m[mo]);return(!isNaN(v)&&v>0)?v:1;}
 // ── PER-VENUE MULTI-FORECAST ──────────────────────────────────────────────
 async function runForecastMulti(fcDays, url){
   var venues=[...new Set(AR.map(r=>r.venue))].sort();
@@ -457,8 +459,9 @@ async function runForecastMulti(fcDays, url){
     var adjFc=vResult.forecast.map(function(v,i){
       var ds=vResult.forecast_dates[i];
       var adj=getAdj(ds,vms,ts,tstat);
-      return{fc:v*adj,lo:(vResult.lower_90[i]||v)*adj,hi:(vResult.upper_90[i]||v)*adj,
-             adj:adj,ds:ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)};
+      var mm=getVenueMonthMult(ven,ds);
+      return{fc:v*adj*mm,lo:(vResult.lower_90[i]||v)*adj*mm,hi:(vResult.upper_90[i]||v)*adj*mm,
+             adj:adj,mm:mm,ds:ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)};
     });
 
     fcResultByVenue[ven]={agg:agg,adjFc:adjFc,d:vResult,fcDays:fcDays,vms:vms,ts:ts,tstat:tstat,lastD:lastD};
@@ -558,7 +561,7 @@ async function runForecast(){
     setSt('fcSt','busy','<span class="spin">(*)</span>&nbsp;Running forecast ('+fcDays+' days)...');
     var res=await fetch(url+'/forecast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dates:agg.map(r=>r.dateStr),values:agg.map(r=>r[CM]),forecast_days:fcDays,holiday_dates:[...HS],weather_map:wxFlat}),signal:AbortSignal.timeout(90000)});
     var d=await res.json();if(d.error)throw new Error(d.error);
-    var adjFc=d.forecast.map((v,i)=>{var ds=d.forecast_dates[i],adj=getAdj(ds,vms,ts,tstat);return{fc:v*adj,lo:(d.lower_90[i]||v)*adj,hi:(d.upper_90[i]||v)*adj,adj,ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}});
+    var adjFc=d.forecast.map((v,i)=>{var ds=d.forecast_dates[i],adj=getAdj(ds,vms,ts,tstat),mm=getVenueMonthMult(CRV,ds);return{fc:v*adj*mm,lo:(d.lower_90[i]||v)*adj*mm,hi:(d.upper_90[i]||v)*adj*mm,adj,mm,ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}});
     lastFcResult={agg,adjFc,d,fcDays,vms,ts,tstat,lastD};fcResultByVenue[CRV]=lastFcResult;
     var warns=d.warnings||[],wHtml=warns.length?' n/a <span style="color:var(--m)">'+warns[warns.length-1]+'</span>':'';
     setSt('fcSt','ok','(ok) '+d.model+'  RMSE='+d.rmse?.toFixed(2)+'  CV='+((d.cv||0)*100).toFixed(1)+'%'+wHtml);
@@ -764,16 +767,8 @@ function updVM(v,f,val){
   if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k='vm_'+v.replace(/[^a-z0-9]/gi,'_');['s','cc','lat','lon'].forEach(f2=>{var el=document.getElementById(k+'_'+f2);if(el)el.textContent=f2==='s'?(VM[v].state||'n/a'):f2==='cc'?(VM[v].cc||'n/a'):f2==='lat'?(VM[v].lat?VM[v].lat.toFixed(4):'n/a'):(VM[v].lon?VM[v].lon.toFixed(4):'n/a')});}else VM[v][f]=val;
 }
 
-function dlVenueTemplate(){
-  var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity'];
-  [...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{var vm=VM[v]||{};rows.push([v,vm.city||'',vm.state||'',vm.cc||'AU',vm.lat||'',vm.lon||'',vm.holidayMult||1.10,vm.tempSens!=null?vm.tempSens:''].join(','))});
-  dlString(rows.join('\n'),'venue_city_mapping_template.csv','text/csv');
-}
-function exportVenueMapping(){
-  var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity'];
-  [...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{var vm=VM[v]||{};rows.push(['"'+esc(v)+'"',vm.city||'',vm.state||'',vm.cc||'',vm.lat||'',vm.lon||'',vm.holidayMult||'',vm.tempSens!=null?vm.tempSens:''].join(','))});
-  dlString(rows.join('\n'),'venue_mapping_'+iso(new Date())+'.csv','text/csv');
-}
+function dlVenueTemplate(){var mhdr=Array.from({length:12},(_,i)=>'Mth '+(i+1)+' Multiplier').join(',');var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mhdr];[...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{var vm=VM[v]||{},mm=VM_MULTS[v]||Array(12).fill(1);rows.push([v,vm.city||'',vm.state||'',vm.cc||'AU',vm.lat||'',vm.lon||'',vm.holidayMult||1.10,vm.tempSens!=null?vm.tempSens:''].concat(mm.map(x=>(+x||1).toFixed(2))).join(','))});dlString(rows.join('\n'),'venue_city_mapping_template.csv','text/csv');}
+function exportVenueMapping(){var mhdr=Array.from({length:12},(_,i)=>'Mth '+(i+1)+' Multiplier').join(',');var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mhdr];[...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{var vm=VM[v]||{},mm=VM_MULTS[v]||Array(12).fill(1);rows.push(['"'+esc(v)+'"',vm.city||'',vm.state||'',vm.cc||'',vm.lat||'',vm.lon||'',vm.holidayMult||'',vm.tempSens!=null?vm.tempSens:''].concat(mm.map(x=>(+x||1).toFixed(2))).join(','))});dlString(rows.join('\n'),'venue_mapping_'+iso(new Date())+'.csv','text/csv');}
 function importVenueMapping(inp){
   if(!inp.files[0])return;
   var rd=new FileReader();
@@ -784,7 +779,7 @@ function importVenueMapping(inp){
     var iv=fi(['venue','name']),ic=fi(['city']),is_=fi(['state']),icc=fi(['country_code','country']),ilat=fi(['latitude','lat']),ilon=fi(['longitude','lon']),ihm=fi(['holiday_multiplier','holiday_mult']),its=fi(['temp_sensitivity','temp_sens']);
     var g=(vs,idx)=>idx>=0?(vs[idx]||'').trim().replace(/[""]/g,''):'';
     var imported=0;
-    for(var i=1;i<ls.length;i++){var vs=ls[i].split(','),vname=g(vs,iv);if(!vname)continue;var city=g(vs,ic),cp=CITIES[city];VM[vname]={city,state:g(vs,is_)||(cp?.s||''),cc:g(vs,icc)||(cp?.cc||'AU'),lat:parseFloat(g(vs,ilat))||cp?.lat||null,lon:parseFloat(g(vs,ilon))||cp?.lon||null,holidayMult:parseFloat(g(vs,ihm))||1.10,tempSens:g(vs,its)?parseFloat(g(vs,its)):null};imported++;}
+    for(var i=1;i<ls.length;i++){var vs=ls[i].split(','),vname=g(vs,iv);if(!vname)continue;var city=g(vs,ic),cp=CITIES[city];VM[vname]={city,state:g(vs,is_)||(cp?.s||''),cc:g(vs,icc)||(cp?.cc||'AU'),lat:parseFloat(g(vs,ilat))||cp?.lat||null,lon:parseFloat(g(vs,ilon))||cp?.lon||null,holidayMult:parseFloat(g(vs,ihm))||1.10,tempSens:g(vs,its)?parseFloat(g(vs,its)):null};var mults=[];for(var mi=1;mi<=12;mi++){var mhi=nh.findIndex(function(h){return h==='mth_'+mi+'_multiplier'||h==='mth'+mi+'multiplier'||h.includes('mth_'+mi+'_')||h==='month_'+mi+'_multiplier';});mults.push(mhi>=0&&g(vs,mhi)?parseFloat(g(vs,mhi))||1:1);}VM_MULTS[vname]=mults;imported++;}
     alert('Imported '+imported+' venue mappings.');renderVT();
   };rd.readAsText(inp.files[0]);inp.value='';
 }
