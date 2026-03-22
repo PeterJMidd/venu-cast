@@ -325,7 +325,7 @@ function pd(s){if(!s)return null;s=String(s).trim().replace(/[""]/g,'');var m=s.
 function iso(d){return d.toISOString().slice(0,10)}
 function addD(d,n){var r=new Date(d);r.setDate(r.getDate()+n);return r}
 function fd(s){if(!s)return'';var d=new Date(s+'T00:00:00');return d.toLocaleDateString('en-AU',{day:'numeric',month:'short',year:'2-digit'})}
-function fm(n,p){if(n==null||isNaN(n))return'—';p=p||'';if(Math.abs(n)>=1e6)return p+(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1e3)return p+(n/1e3).toFixed(1)+'K';return p+Math.round(n)}
+function fm(n,p){if(n==null||isNaN(n))return'n/a';p=p||'';if(Math.abs(n)>=1e6)return p+(n/1e6).toFixed(1)+'M';if(Math.abs(n)>=1e3)return p+(n/1e3).toFixed(1)+'K';return p+Math.round(n)}
 function avgs(a){return a.length?a.reduce((s,v)=>s+v,0)/a.length:0}
 function stdv(a){var m=avgs(a);return Math.sqrt(a.reduce((s,v)=>s+(v-m)**2,0)/a.length)||1}
 function getApiUrl(){return(document.getElementById('apiUrl').value||'').replace(/\/+$/,'')}
@@ -432,51 +432,24 @@ async function runForecast(){
   document.getElementById('kG').textContent=fm(tG);
   document.getElementById('kA').textContent='$'+(avgA||0).toFixed(2);
   document.getElementById('kDA').textContent=fm(tS/agg.length,'$');
-  document.getElementById('cTtl').textContent=mL[CM]+' — historical & forecast';
-  if(!url){setSt('fcSt','err','⚠ No API URL set — enter your Render URL above and click Test.');renderHWFallback(agg,fcDays,lastD,vms,ts,tstat);return;}
+  document.getElementById('cTtl').textContent=mL[CM]+' n/a historical & forecast';
+  if(!url){setSt('fcSt','err','⚠ No API URL set n/a enter your Render URL above and click Test.');renderHWFallback(agg,fcDays,lastD,vms,ts,tstat);return;}
   if(fcRunning)return;
   fcRunning=true;document.getElementById('runBtn').disabled=true;
-
+  setSt('fcSt','busy','<span class="spin">⚙</span>&nbsp;Running forecast ('+fcDays+' days)… Prophet may take 20–40s on first run.');
   try{
-    // ── ALL VENUES: run Prophet independently per venue then sum ─────────────
-    if(CRV==='__all__'){
-      try{
-        await runForecastMulti(fcDays,url);
-        var res2=fcResultByVenue['__all__'];
-        if(!res2)throw new Error('No multi-venue result');
-        lastFcResult=res2;
-        var d2=res2.d,adjFc2=res2.adjFc;
-        setSt('fcSt','ok','✓ '+d2.model+' &nbsp;|&nbsp; avg RMSE='+d2.rmse?.toFixed(2)+'  &nbsp;<span class="bdg g">Per-venue forecasts</span>');
-        document.getElementById('mBdg').textContent=d2.model;
-        document.getElementById('mInfo').innerHTML='<span class="mp">avg RMSE=<b>'+(d2.rmse||0).toFixed(2)+'</b></span><span class="mp">per venue</span>';
-        var fTot2=adjFc2.reduce((s,p)=>s+p.fc,0),fLo2=adjFc2.reduce((s,p)=>s+p.lo,0),fHi2=adjFc2.reduce((s,p)=>s+p.hi,0);
-        var pfx2=CM==='guests'?'':'$';
-        document.getElementById('kF').textContent=CM==='guests'?fm(fTot2):fm(fTot2,'$');
-        document.getElementById('kFN').textContent=fcNval+' '+CU+' · '+fm(fLo2,pfx2)+'–'+fm(fHi2,pfx2)+' 90%CI';
-        document.getElementById('adjBdg').style.display='none';
-        document.getElementById('adjInfo').style.display='none';
-        drawMainChart(res2.agg,d2,adjFc2,res2.vms);drawDOW(res2.agg);
-        return;
-      }catch(e2){
-        setSt('fcSt','err','✕ Multi-venue forecast failed: '+e2.message+'. Falling back to aggregated forecast.');
-        // fall through to single aggregated forecast below
-      }
-    }
-
-    // ── SINGLE VENUE (or fallback): run forecast on aggregated data ──────────
-    setSt('fcSt','busy','<span class="spin">⚙</span>&nbsp;Running forecast ('+fcDays+' days)… Prophet may take 20–40s on first run.');
     var res=await fetch(url+'/forecast',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({dates:agg.map(r=>r.dateStr),values:agg.map(r=>r[CM]),forecast_days:fcDays,holiday_dates:[...HS],weather_map:wxFlat}),signal:AbortSignal.timeout(90000)});
     var d=await res.json();if(d.error)throw new Error(d.error);
     var adjFc=d.forecast.map((v,i)=>{var ds=d.forecast_dates[i],adj=getAdj(ds,vms,ts,tstat);return{fc:v*adj,lo:(d.lower_90[i]||v)*adj,hi:(d.upper_90[i]||v)*adj,adj,ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}});
     lastFcResult={agg,adjFc,d,fcDays,vms,ts,tstat,lastD};fcResultByVenue[CRV]=lastFcResult;
-    var warns=d.warnings||[],wHtml=warns.length?' — <span style="color:var(--m)">'+warns[warns.length-1]+'</span>':'';
+    var warns=d.warnings||[],wHtml=warns.length?' n/a <span style="color:var(--m)">'+warns[warns.length-1]+'</span>':'';
     setSt('fcSt','ok','✓ '+d.model+'  RMSE='+d.rmse?.toFixed(2)+'  CV='+((d.cv||0)*100).toFixed(1)+'%'+wHtml);
     document.getElementById('mBdg').textContent=d.model;
     document.getElementById('mInfo').innerHTML='<span class="mp">RMSE=<b>'+(d.rmse||0).toFixed(2)+'</b></span><span class="mp">CV=<b>'+((d.cv||0)*100).toFixed(1)+'%</b></span>';
     var hasAdj=vms.some(vm=>WBC[vm.city])||HS.size||EVS.length;
     document.getElementById('adjBdg').style.display=hasAdj?'':'none';
     var ai=document.getElementById('adjInfo');
-    if(hasAdj){ai.style.display='';var pts=[];if(vms.some(vm=>WBC[vm.city]))pts.push('<b>Temperature</b> (sensitivity='+ts.toFixed(3)+')');if(HS.size)pts.push('<b>'+HS.size+' public holidays</b>');if(EVS.length)pts.push('<b>'+EVS.length+' custom events</b>');var adjN=adjFc.filter(p=>Math.abs(p.adj-1)>0.01).length;ai.innerHTML='<b>Adjustments applied:</b> '+pts.join(' · ')+' — '+adjN+' of '+fcDays+' forecast days adjusted';}else ai.style.display='none';
+    if(hasAdj){ai.style.display='';var pts=[];if(vms.some(vm=>WBC[vm.city]))pts.push('<b>Temperature</b> (sensitivity='+ts.toFixed(3)+')');if(HS.size)pts.push('<b>'+HS.size+' public holidays</b>');if(EVS.length)pts.push('<b>'+EVS.length+' custom events</b>');var adjN=adjFc.filter(p=>Math.abs(p.adj-1)>0.01).length;ai.innerHTML='<b>Adjustments applied:</b> '+pts.join(' · ')+' n/a '+adjN+' of '+fcDays+' forecast days adjusted';}else ai.style.display='none';
     var fTot=adjFc.reduce((s,p)=>s+p.fc,0),fLo=adjFc.reduce((s,p)=>s+p.lo,0),fHi=adjFc.reduce((s,p)=>s+p.hi,0);
     var pfx=CM==='guests'?'':'$';
     document.getElementById('kF').textContent=CM==='guests'?fm(fTot):fm(fTot,'$');
@@ -560,19 +533,50 @@ function drawDOW(agg){
 function drawComponents(d,agg){
   compCharts.forEach(c=>c.destroy());compCharts=[];
   var comps=d.components||{};
-  if(!Object.keys(comps).length){document.getElementById('compsCnt').innerHTML='<div style="text-align:center;padding:48px;color:var(--m);font-family:var(--fm)">No components — run with Prophet to see decomposition.</div>';return;}
+  if(!Object.keys(comps).length){
+    document.getElementById('compsCnt').innerHTML='<div style="text-align:center;padding:48px;color:var(--m);font-family:var(--fm)">No components. Run with Prophet to see decomposition.</div>';
+    return;
+  }
   var hDates=agg.map(r=>r.dateStr),fDates=d.forecast_dates||[];
   document.getElementById('compsCnt').innerHTML='<div class="comp-grid" id="compGrid"></div>';
   var grid=document.getElementById('compGrid');
-  Object.entries(comps).forEach(([name,data])=>{
+  Object.entries(comps).forEach(function(entry){
+    var name=entry[0],data=entry[1];
     if(!data)return;
     var histVals=data.hist||[],fcVals=data.forecast||[];
-    var allLabels=[...hDates,...fDates];
-    var allVals=[...histVals,...Array(fDates.length).fill(null)];
-    var fcAllVals=[...Array(hDates.length).fill(null),...fcVals];
-    var id='comp_'+name,colors={trend:'#3b82f6',weekly:'#f59e0b',yearly:'#34d399',holidays:'#f87171'},col=colors[name]||'#c5cde8';
+    var allLabels=hDates.concat(fDates);
+    var allVals=histVals.concat(Array(fDates.length).fill(null));
+    var fcAllVals=Array(hDates.length).fill(null).concat(fcVals);
+    var id='comp_'+name;
+    var colors={trend:'#3b82f6',weekly:'#f59e0b',yearly:'#34d399',holidays:'#f87171'};
+    var col=colors[name]||'#c5cde8';
     grid.innerHTML+='<div class="cc" style="margin-bottom:0"><div class="chdr"><span class="ct">'+name+' component</span><span class="bdg b">Prophet</span></div><canvas id="'+id+'" style="max-height:150px"></canvas></div>';
-    setTimeout(()=>{var ctx=document.getElementById(id)?.getContext('2d');if(!ctx)return;var step=Math.max(1,Math.floor(allLabels.length/10));var c=new Chart(ctx,{type:'line',data:{labels:allLabels,datasets:[{label:name+' (hist)',data:allVals,borderColor:col,borderWidth:1.5,fill:true,backgroundColor:col+'18',pointRadius:0,tension:.4,spanGaps:false},{label:name+' (fc)',data:fcAllVals,borderColor:col,borderWidth:2,borderDash:[6,4],fill:false,pointRadius:0,tension:.4,spanGaps:false}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:false},tooltip:{callbacks:{title:([i])=>fd(i.label),label:i=>i.dataset.label+': '+(i.raw!=null?i.raw.toFixed(4):'—')}}},scales:{x:{grid:{color:GC},ticks:{color:TC,font:{size:8},maxTicksLimit:10,callback:(v,i)=>i%step===0?fd(allLabels[i]):''}},y:{grid:{color:GC},ticks:{color:TC,font:{size:9}}}}}}});compCharts.push(c);},50);
+    setTimeout(function(){
+      var el=document.getElementById(id);
+      if(!el)return;
+      var ctx=el.getContext('2d');
+      if(!ctx)return;
+      var step=Math.max(1,Math.floor(allLabels.length/10));
+      var c=new Chart(ctx,{
+        type:'line',
+        data:{labels:allLabels,datasets:[
+          {label:name+' (hist)',data:allVals,borderColor:col,borderWidth:1.5,fill:true,backgroundColor:col+'18',pointRadius:0,tension:0.4,spanGaps:false},
+          {label:name+' (fc)',data:fcAllVals,borderColor:col,borderWidth:2,borderDash:[6,4],fill:false,pointRadius:0,tension:0.4,spanGaps:false}
+        ]},
+        options:{
+          responsive:true,animation:{duration:200},
+          plugins:{legend:{display:false},tooltip:{callbacks:{
+            title:function(items){return fd(items[0].label);},
+            label:function(i){return i.dataset.label+': '+(i.raw!=null?i.raw.toFixed(4):'none');}
+          }}},
+          scales:{
+            x:{grid:{color:GC},ticks:{color:TC,font:{size:8},maxTicksLimit:10,callback:function(v,i){return i%step===0?fd(allLabels[i]):''}}},
+            y:{grid:{color:GC},ticks:{color:TC,font:{size:9}}}
+          }
+        }
+      });
+      compCharts.push(c);
+    },50);
   });
 }
 
@@ -588,7 +592,7 @@ function drawWxChart(cityList){
   var step=Math.max(1,Math.floor(dates.length/12));
   if(WXC)WXC.destroy();
   var ctx=document.getElementById('WXC').getContext('2d');
-  WXC=new Chart(ctx,{type:'bar',data:{labels:dates,datasets:[{label:'Precip (mm)',data:prec,backgroundColor:'rgba(59,130,246,0.3)',borderColor:'rgba(59,130,246,0.5)',borderWidth:1,yAxisID:'yp',order:2},{label:'Max Temp °C',data:temps,borderColor:'#34d399',borderWidth:2,fill:true,backgroundColor:'rgba(52,211,153,0.07)',pointRadius:0,tension:.4,spanGaps:true,type:'line',yAxisID:'yt',order:1}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:14,font:{size:9},color:TC,padding:8}},tooltip:{callbacks:{title:([i])=>fd(i.label),label:i=>i.dataset.label+': '+(i.raw!=null?i.raw.toFixed(1):'—')+(i.dataset.label.includes('°C')?'°C':'mm')}}},scales:{x:{grid:{color:GC},ticks:{color:TC,font:{size:9},maxTicksLimit:12,callback:(v,i)=>i%step===0?fd(dates[i]):''}},yt:{grid:{color:GC},ticks:{color:'rgba(52,211,153,0.6)',font:{size:9},callback:v=>v+'°'},position:'left'},yp:{grid:{display:false},ticks:{color:'rgba(59,130,246,0.6)',font:{size:9},callback:v=>v+'mm'},position:'right'}}}});
+  WXC=new Chart(ctx,{type:'bar',data:{labels:dates,datasets:[{label:'Precip (mm)',data:prec,backgroundColor:'rgba(59,130,246,0.3)',borderColor:'rgba(59,130,246,0.5)',borderWidth:1,yAxisID:'yp',order:2},{label:'Max Temp °C',data:temps,borderColor:'#34d399',borderWidth:2,fill:true,backgroundColor:'rgba(52,211,153,0.07)',pointRadius:0,tension:.4,spanGaps:true,type:'line',yAxisID:'yt',order:1}]},options:{responsive:true,animation:{duration:200},plugins:{legend:{display:true,position:'bottom',labels:{boxWidth:14,font:{size:9},color:TC,padding:8}},tooltip:{callbacks:{title:([i])=>fd(i.label),label:i=>i.dataset.label+': '+(i.raw!=null?i.raw.toFixed(1):'n/a')+(i.dataset.label.includes('°C')?'°C':'mm')}}},scales:{x:{grid:{color:GC},ticks:{color:TC,font:{size:9},maxTicksLimit:12,callback:(v,i)=>i%step===0?fd(dates[i]):''}},yt:{grid:{color:GC},ticks:{color:'rgba(52,211,153,0.6)',font:{size:9},callback:v=>v+'°'},position:'left'},yp:{grid:{display:false},ticks:{color:'rgba(59,130,246,0.6)',font:{size:9},callback:v=>v+'mm'},position:'right'}}}});
 }
 
 async function fetchAll(){
@@ -629,17 +633,17 @@ function setWChip(city,state,lbl){
 function renderVT(){
   var venues=[...new Set(AR.map(r=>r.venue))].sort(),cnts={};
   AR.forEach(r=>{cnts[r.venue]=(cnts[r.venue]||0)+1});
-  var cityOpts='<option value="">— Select city —</option>'+Object.keys(CITIES).map(c=>'<option value="'+c+'">'+c+'</option>').join('');
+  var cityOpts='<option value="">n/a Select city n/a</option>'+Object.keys(CITIES).map(c=>'<option value="'+c+'">'+c+'</option>').join('');
   document.getElementById('vTbd').innerHTML=venues.map(v=>{
     var vm=VM[v]||{},key='vm_'+v.replace(/[^a-z0-9]/gi,'_');
     var opts=cityOpts.replace('value="'+(vm.city||'XXXX')+'"','value="'+(vm.city||'')+'" selected');
-    return '<tr><td style="font-weight:700;color:#dde1f5;white-space:nowrap">'+v+'</td><td><select id="'+key+'_city" onchange="updVM(\''+v+'\',\'city\',this.value)" style="width:130px">'+opts+'</select></td><td id="'+key+'_s" style="color:var(--m)">'+(vm.state||'—')+'</td><td id="'+key+'_cc" style="color:var(--m)">'+(vm.cc||'—')+'</td><td id="'+key+'_lat" style="color:var(--m)">'+(vm.lat?vm.lat.toFixed(4):'—')+'</td><td id="'+key+'_lon" style="color:var(--m)">'+(vm.lon?vm.lon.toFixed(4):'—')+'</td><td><input type="number" value="'+(vm.holidayMult||1.10)+'" step="0.05" min="0.5" max="3" onchange="updVM(\''+v+'\',\'holidayMult\',+this.value)" style="width:55px"></td><td><input type="number" value="'+(vm.tempSens!=null?vm.tempSens:'')+'" step="0.01" min="-0.5" max="0.5" placeholder="Auto" onchange="updVM(\''+v+'\',\'tempSens\',this.value?+this.value:null)" style="width:65px"></td><td style="color:var(--m)">'+(cnts[v]||0)+'</td></tr>';
+    return '<tr><td style="font-weight:700;color:#dde1f5;white-space:nowrap">'+v+'</td><td><select id="'+key+'_city" onchange="updVM(\''+v+'\',\'city\',this.value)" style="width:130px">'+opts+'</select></td><td id="'+key+'_s" style="color:var(--m)">'+(vm.state||'n/a')+'</td><td id="'+key+'_cc" style="color:var(--m)">'+(vm.cc||'n/a')+'</td><td id="'+key+'_lat" style="color:var(--m)">'+(vm.lat?vm.lat.toFixed(4):'n/a')+'</td><td id="'+key+'_lon" style="color:var(--m)">'+(vm.lon?vm.lon.toFixed(4):'n/a')+'</td><td><input type="number" value="'+(vm.holidayMult||1.10)+'" step="0.05" min="0.5" max="3" onchange="updVM(\''+v+'\',\'holidayMult\',+this.value)" style="width:55px"></td><td><input type="number" value="'+(vm.tempSens!=null?vm.tempSens:'')+'" step="0.01" min="-0.5" max="0.5" placeholder="Auto" onchange="updVM(\''+v+'\',\'tempSens\',this.value?+this.value:null)" style="width:65px"></td><td style="color:var(--m)">'+(cnts[v]||0)+'</td></tr>';
   }).join('');
 }
 
 function updVM(v,f,val){
   if(!VM[v])VM[v]={holidayMult:1.10,tempSens:null};
-  if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k='vm_'+v.replace(/[^a-z0-9]/gi,'_');['s','cc','lat','lon'].forEach(f2=>{var el=document.getElementById(k+'_'+f2);if(el)el.textContent=f2==='s'?(VM[v].state||'—'):f2==='cc'?(VM[v].cc||'—'):f2==='lat'?(VM[v].lat?VM[v].lat.toFixed(4):'—'):(VM[v].lon?VM[v].lon.toFixed(4):'—')});}else VM[v][f]=val;
+  if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k='vm_'+v.replace(/[^a-z0-9]/gi,'_');['s','cc','lat','lon'].forEach(f2=>{var el=document.getElementById(k+'_'+f2);if(el)el.textContent=f2==='s'?(VM[v].state||'n/a'):f2==='cc'?(VM[v].cc||'n/a'):f2==='lat'?(VM[v].lat?VM[v].lat.toFixed(4):'n/a'):(VM[v].lon?VM[v].lon.toFixed(4):'n/a')});}else VM[v][f]=val;
 }
 
 function dlVenueTemplate(){
@@ -691,62 +695,24 @@ function openExport(){
   venues.forEach(ven=>{venueDOWShare[ven]={};for(var dow=0;dow<7;dow++){var vd=AR.filter(r=>r.venue===ven&&r.dow===dow).reduce((s,r)=>s+r.sales,0);venueDOWShare[ven][dow]=vd/dowTotals[dow];}});
   var venueRatios={};
   venues.forEach(ven=>{var vRows=AR.filter(r=>r.venue===ven),vS=vRows.reduce((s,r)=>s+r.sales,0)||1,vG=vRows.reduce((s,r)=>s+r.guests,0),vA=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;venueRatios[ven]={gRatio:vG/vS,avgAtv:vA};});
-  // ── Check we have per-venue forecasts ──────────────────────────────────────
-  // If multi-venue forecast was run, use each venue's own Prophet result directly.
-  // If not, fall back to proportional split from __all__.
-  var hasPerVenue=venues.every(ven=>fcResultByVenue[ven]&&fcResultByVenue[ven].d&&fcResultByVenue[ven].d.forecast_dates);
-  var allRes=fcResultByVenue['__all__'];
-
-  if(!hasPerVenue&&(!allRes||!allRes.d||!allRes.d.forecast_dates)){
-    alert('Please select "All Venues (combined)", click ▶ Run Forecast, then export.');return;
-  }
-
-  var header='venue,date,dow,type,sales,guests,atv,forecast_sales,lower_90,upper_90,forecast_guests,forecast_atv,is_holiday,holiday_name,temp_max_c,adj_factor,model,forecast_method';
+  var res=fcResultByVenue['__all__'];
+  if(!res||!res.d||!res.d.forecast_dates){alert('Please select "All Venues (combined)", click Run Forecast, then export.');return;}
+  var d=res.d,adjFc=res.adjFc,model=d.model||'';
+  var header='venue,date,dow,type,sales,guests,atv,forecast_sales,lower_90,upper_90,forecast_guests,forecast_atv,is_holiday,holiday_name,temp_max_c,adj_factor,model';
   var lines=[header];
-
-  // ── Historical rows — one per venue per date ──────────────────────────────
-  AR.forEach(r=>{
-    var holName=HD.find(h=>h.date===r.dateStr)?.name||'',vms=getVMs(r.venue),t=getTempForDate(r.dateStr,vms);
-    lines.push(['"'+esc(r.venue)+'"',r.dateStr,DOW[r.dow],'historical',r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),'','','','','',HS.has(r.dateStr)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'','1.000','','actual'].join(','));
-  });
-
-  // ── Forecast rows ─────────────────────────────────────────────────────────
-  if(hasPerVenue){
-    // ✅ BEST: each venue has its own Prophet forecast — use directly, no splitting
+  AR.forEach(r=>{var holName=HD.find(h=>h.date===r.dateStr)?.name||'',vms=getVMs(r.venue),t=getTempForDate(r.dateStr,vms);lines.push(['"'+esc(r.venue)+'"',r.dateStr,DOW[r.dow],'historical',r.sales.toFixed(2),r.guests.toFixed(0),r.atv.toFixed(2),'','','','','',HS.has(r.dateStr)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'','1.000',''].join(','));});
+  d.forecast_dates.forEach((ds,i)=>{
+    var p=adjFc[i]||{},totalFcS=p.fc||0,totalFcLo=p.lo||0,totalFcHi=p.hi||0;
+    var dow=new Date(ds+'T00:00:00').getDay(),holName=HD.find(h=>h.date===ds)?.name||'';
+    var shareSum=venues.reduce((s,ven)=>{var sh=venueDOWShare[ven]?.[dow];return s+(sh>0?sh:venueAvgShare[ven]);},0)||1;
     venues.forEach(ven=>{
-      var vRes=fcResultByVenue[ven];
-      var vd=vRes.d,vadjFc=vRes.adjFc,vmodel=vd.model||'';
-      var vRows=AR.filter(r=>r.venue===ven);
-      var vS=vRows.reduce((s,r)=>s+r.sales,0)||1;
-      var gRatio=vRows.reduce((s,r)=>s+r.guests,0)/vS;
-      var avgAtv=vRows.length?vRows.reduce((s,r)=>s+r.atv,0)/vRows.length:0;
-      var vms=getVMs(ven);
-      vd.forecast_dates.forEach((ds,i)=>{
-        var p=vadjFc[i]||{};
-        var fcS=p.fc||0,fcLo=p.lo||0,fcHi=p.hi||0;
-        var fcG=fcS*gRatio,fcA=avgAtv;
-        var dow=new Date(ds+'T00:00:00').getDay();
-        var holName=HD.find(h=>h.date===ds)?.name||'';
-        var t=getTempForDate(ds,vms);
-        lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(vmodel)+'"','per-venue Prophet'].join(','));
-      });
+      var rawShare=venueDOWShare[ven]?.[dow],share=(rawShare>0?rawShare:venueAvgShare[ven])/shareSum;
+      var fcS=totalFcS*share,fcLo=totalFcLo*share,fcHi=totalFcHi*share;
+      var fcG=fcS*(venueRatios[ven]?.gRatio||0),fcA=venueRatios[ven]?.avgAtv||0;
+      var vms=getVMs(ven),t=getTempForDate(ds,vms);
+      lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(model)+'"'].join(','));
     });
-  } else {
-    // ⚠ FALLBACK: proportional split from __all__ forecast
-    var d=allRes.d,adjFc=allRes.adjFc,model=d.model||'';
-    d.forecast_dates.forEach((ds,i)=>{
-      var p=adjFc[i]||{},totalFcS=p.fc||0,totalFcLo=p.lo||0,totalFcHi=p.hi||0;
-      var dow=new Date(ds+'T00:00:00').getDay(),holName=HD.find(h=>h.date===ds)?.name||'';
-      var shareSum=venues.reduce((s,ven)=>{var sh=venueDOWShare[ven]?.[dow];return s+(sh>0?sh:venueAvgShare[ven]);},0)||1;
-      venues.forEach(ven=>{
-        var rawShare=venueDOWShare[ven]?.[dow],share=(rawShare>0?rawShare:venueAvgShare[ven])/shareSum;
-        var fcS=totalFcS*share,fcLo=totalFcLo*share,fcHi=totalFcHi*share;
-        var fcG=fcS*(venueRatios[ven]?.gRatio||0),fcA=venueRatios[ven]?.avgAtv||0;
-        var vms=getVMs(ven),t=getTempForDate(ds,vms);
-        lines.push(['"'+esc(ven)+'"',ds,DOW[dow],'forecast','','','',fcS.toFixed(2),fcLo.toFixed(2),fcHi.toFixed(2),fcG.toFixed(0),fcA.toFixed(2),HS.has(ds)?1:0,'"'+esc(holName)+'"',t!=null?t.toFixed(1):'',(p.adj||1).toFixed(3),'"'+esc(model)+'"','proportional split'].join(','));
-      });
-    });
-  }
+  });
   var csv=lines.join('\n');
   document.getElementById('csvTxt').value=csv;
   document.getElementById('epScope').textContent=venues.length+' venues · '+d.forecast_dates.length+' forecast days · '+(lines.length-1)+' rows';
