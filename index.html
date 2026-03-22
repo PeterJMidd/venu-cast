@@ -301,6 +301,9 @@ var AR=[],VM={},WBC={},HS=new Set(),HD=[],EVS=[];
 var CM='sales',CU='days',CRV='__all__';
 var fcResultByVenue={},lastFcResult=null;
 var VM_MULTS={};
+var MIN_PROPHET_DAYS=30; // min history to run Prophet; below this falls back to HW
+var MAX_FC_RATIO=1.5;    // forecast horizon capped at history_days * this ratio
+var VM_MULTS={};
 var MC=null,DC=null,WXC=null,compCharts=[];
 var DOW=['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
 var ETYPES=['Public Holiday','School Holiday','Local Event','Sport','Festival','Conference','Custom'];
@@ -419,12 +422,20 @@ function getVenueMonthMult(ven,ds){
   var mo=new Date(ds+'T00:00:00').getMonth();
   var v=parseFloat(m[mo]);return(!isNaN(v)&&v>0)?v:1;
 }
+function getVenueMonthMult(ven,ds){
+  var m=VM_MULTS[ven];if(!m||!m.length)return 1;
+  var mo=new Date(ds+'T00:00:00').getMonth();
+  var v=parseFloat(m[mo]);return(!isNaN(v)&&v>0)?v:1;
+}
+
 // ── PER-VENUE MULTI-FORECAST ──────────────────────────────────────────────
 async function runForecastMulti(fcDays, url){
   var venues=[...new Set(AR.map(r=>r.venue))].sort();
   var nV=venues.length;
   var timeout=Math.max(180000, nV*65000, 5400000); // minimum 90 min for large networks
   var localMeta={};
+  var skippedVenues=[];   // venues with too little data for Prophet
+  var trimmedVenues={};   // venues where forecast horizon was capped
   var apiPayload=venues.map(function(ven){
     var agg=getAgg(ven);
     var vms=getVMs(ven);
@@ -436,10 +447,23 @@ async function runForecastMulti(fcDays, url){
       if(WBC[vm.city])Object.entries(WBC[vm.city]).forEach(function(e){wxFlat[e[0]]={tMax:e[1].tMax,pr:e[1].pr};});
     });
     var lastD=agg.length?new Date(agg[agg.length-1].dateStr+'T00:00:00'):new Date();
-    localMeta[ven]={agg:agg,vms:vms,ts:ts,tstat:tstat,lastD:lastD};
+    // ── NEW STORE TRIM: cap forecast horizon to history length × MAX_FC_RATIO ──
+    var histDays=agg.length;
+    var venueFcDays=fcDays;
+    if(histDays<MIN_PROPHET_DAYS){
+      skippedVenues.push(ven); // will be handled by HW fallback below
+    } else {
+      var maxAllowed=Math.round(histDays*MAX_FC_RATIO);
+      if(fcDays>maxAllowed){
+        venueFcDays=maxAllowed;
+        trimmedVenues[ven]={requested:fcDays,capped:maxAllowed,histDays:histDays};
+      }
+    }
+    localMeta[ven]={agg:agg,vms:vms,ts:ts,tstat:tstat,lastD:lastD,histDays:histDays,venueFcDays:venueFcDays};
     return{name:ven,dates:agg.map(r=>r.dateStr),values:agg.map(r=>r[CM]),
-           forecast_days:fcDays,holiday_dates:[...HS],weather_map:wxFlat};
-  });
+           forecast_days:venueFcDays,holiday_dates:[...HS],weather_map:wxFlat,
+           hist_days:histDays};
+  }).filter(function(p){return !skippedVenues.includes(p.name);});
 
   setSt('fcSt','busy','<span class="spin">(*)</span>&nbsp;Running Prophet for '+nV+' venues independently — est. '+Math.ceil(nV*40/60)+' min...');
 
@@ -455,6 +479,34 @@ async function runForecastMulti(fcDays, url){
   var totalFc={},totalLo={},totalHi={},totalFitted={};
   var modelsSeen=new Set(),rmseSum=0,rmseN=0;
 
+  // HW fallback for new stores with < MIN_PROPHET_DAYS history
+  skippedVenues.forEach(function(ven){
+    var meta=localMeta[ven];
+    var agg=meta.agg,vms=meta.vms,ts=meta.ts,tstat=meta.tstat,lastD=meta.lastD;
+    var y=agg.map(r=>r[CM]),M=7,alpha=0.3,beta=0.05,gamma=0.6;
+    var n=y.length,L=avgs(y.slice(0,M))||1,T=0;
+    for(var i=0;i<M&&i+M<n;i++)T+=(y[M+i]-y[i])/(M*M);
+    var S=y.slice(0,M).map(v=>L?v/L:1),fi=[];
+    for(var t2=0;t2<n;t2++){var si=t2%M,pL=L;fi.push((L+T)*(S[si]||1));L=alpha*(y[t2]/(S[si]||1))+(1-alpha)*(L+T);T=beta*(L-pL)+(1-beta)*T;S[si]=gamma*(y[t2]/(L||1))+(1-gamma)*(S[si]||1);}
+    var fc=[],lo=[],hi=[],fdates=[];
+    var rmse=Math.sqrt(y.reduce((s,v,i)=>s+(v-fi[i])**2,0)/n)||1,cv=rmse/(avgs(y)||1);
+    // Cap HW forecast too — no more than history length
+    var hwFcDays=Math.min(fcDays,agg.length);
+    for(var i=0;i<hwFcDays;i++){
+      var v=Math.max(0,(L+(i+1)*T)*(S[(n+i)%M]||1));
+      var ds=iso(addD(lastD,i+1)),adj=getAdj(ds,vms,ts,tstat),mm=getVenueMonthMult(ven,ds),va=v*adj*mm;
+      fc.push(va);lo.push(Math.max(0,va*(1-1.645*cv)));hi.push(va*(1+1.645*cv));fdates.push(ds);
+    }
+    var hwAdjFc=fdates.map((ds,i)=>({fc:fc[i],lo:lo[i],hi:hi[i],adj:1,mm:getVenueMonthMult(ven,ds),ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)}));
+    var hwResult={model:'Holt-Winters (new store, '+agg.length+'d history)',rmse,cv,fitted:fi,forecast_dates:fdates,forecast:fc,lower_90:lo,upper_90:hi,components:{}};
+    fcResultByVenue[ven]={agg,adjFc:hwAdjFc,d:hwResult,fcDays:hwFcDays,vms,ts,tstat,lastD,isNewStore:true,histDays:agg.length};
+    // Add to totals
+    if(!fcDateSet)fcDateSet=fdates;
+    fdates.forEach(function(ds,i){totalFc[ds]=(totalFc[ds]||0)+hwAdjFc[i].fc;totalLo[ds]=(totalLo[ds]||0)+hwAdjFc[i].lo;totalHi[ds]=(totalHi[ds]||0)+hwAdjFc[i].hi;});
+    fi.forEach(function(v,i){totalFitted[i]=(totalFitted[i]||0)+(v||0);});
+    rmseSum+=rmse;rmseN++;
+  });
+
   venues.forEach(function(ven){
     var vResult=data.venues[ven];
     if(!vResult||vResult.error){console.warn('No result for',ven,vResult);return;}
@@ -469,7 +521,9 @@ async function runForecastMulti(fcDays, url){
              adj:adj,mm:mm,ds:ds,t:getTempForDate(ds,vms),isHol:HS.has(ds)};
     });
 
-    fcResultByVenue[ven]={agg:agg,adjFc:adjFc,d:vResult,fcDays:fcDays,vms:vms,ts:ts,tstat:tstat,lastD:lastD};
+    var isTrimmed=!!trimmedVenues[ven];
+    fcResultByVenue[ven]={agg:agg,adjFc:adjFc,d:vResult,fcDays:localMeta[ven].venueFcDays,vms:vms,ts:ts,tstat:tstat,lastD:lastD,
+      isTrimmed:isTrimmed,trimInfo:trimmedVenues[ven]||null,histDays:localMeta[ven].histDays};
 
     if(!fcDateSet)fcDateSet=vResult.forecast_dates;
     vResult.forecast_dates.forEach(function(ds,i){
@@ -548,7 +602,9 @@ async function runForecast(){
         var fl2=af2.reduce(function(s,p){return s+p.lo;},0);
         var fh2=af2.reduce(function(s,p){return s+p.hi;},0);
         var pfx2=CM==='guests'?'':'$';
-        setSt('fcSt','ok','(ok) '+d2.model+'  avg RMSE='+d2.rmse.toFixed(2)+' <span style="background:#34d39918;color:#34d399;border:1px solid #34d39928;padding:2px 7px;border-radius:3px;font-size:9px">Per-venue forecasts</span>');
+        var newStoreTxt=skippedVenues.length?' <span style="background:#3b82f618;color:#93c5fd;border:1px solid #3b82f628;padding:2px 7px;border-radius:3px;font-size:9px">'+skippedVenues.length+' new store'+(skippedVenues.length>1?'s':'')+' → HW fallback</span>':'';
+        var trimTxt=Object.keys(trimmedVenues).length?' <span style="background:#f5950b18;color:#f59e0b;border:1px solid #f59e0b28;padding:2px 7px;border-radius:3px;font-size:9px">'+Object.keys(trimmedVenues).length+' venue'+(Object.keys(trimmedVenues).length>1?'s':'')+' horizon capped</span>':'';
+        setSt('fcSt','ok','(ok) '+d2.model+'  avg RMSE='+d2.rmse.toFixed(2)+' <span style="background:#34d39918;color:#34d399;border:1px solid #34d39928;padding:2px 7px;border-radius:3px;font-size:9px">Per-venue forecasts</span>'+newStoreTxt+trimTxt);
         document.getElementById('mBdg').textContent=d2.model;
         document.getElementById('mInfo').innerHTML='<span class="mp">avg RMSE=<b>'+d2.rmse.toFixed(2)+'</b></span><span class="mp">per venue</span>';
         document.getElementById('kF').textContent=CM==='guests'?fm(ft2):fm(ft2,'$');
