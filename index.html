@@ -413,7 +413,12 @@ function getAdj(ds,vms,ts,tstat){
 }
 
 
-function getVenueMonthMult(ven,ds){var m=VM_MULTS[ven];if(!m||!m.length)return 1;var mo=new Date(ds+'T00:00:00').getMonth();var v=parseFloat(m[mo]);return(!isNaN(v)&&v>0)?v:1;}
+function getVenueMonthMult(ven,ds){
+  // Applies user market-sentiment multiplier on top of Prophet baseline
+  var m=VM_MULTS[ven];if(!m||!m.length)return 1;
+  var mo=new Date(ds+'T00:00:00').getMonth();
+  var v=parseFloat(m[mo]);return(!isNaN(v)&&v>0)?v:1;
+}
 // ── PER-VENUE MULTI-FORECAST ──────────────────────────────────────────────
 async function runForecastMulti(fcDays, url){
   var venues=[...new Set(AR.map(r=>r.venue))].sort();
@@ -767,8 +772,24 @@ function updVM(v,f,val){
   if(f==='city'&&val){var cp=CITIES[val];if(cp)Object.assign(VM[v],{city:val,state:cp.s,cc:cp.cc,lat:cp.lat,lon:cp.lon});else VM[v].city=val;var k='vm_'+v.replace(/[^a-z0-9]/gi,'_');['s','cc','lat','lon'].forEach(f2=>{var el=document.getElementById(k+'_'+f2);if(el)el.textContent=f2==='s'?(VM[v].state||'n/a'):f2==='cc'?(VM[v].cc||'n/a'):f2==='lat'?(VM[v].lat?VM[v].lat.toFixed(4):'n/a'):(VM[v].lon?VM[v].lon.toFixed(4):'n/a')});}else VM[v][f]=val;
 }
 
-function dlVenueTemplate(){var mhdr=Array.from({length:12},(_,i)=>'Mth '+(i+1)+' Multiplier').join(',');var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mhdr];[...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{var vm=VM[v]||{},mm=VM_MULTS[v]||Array(12).fill(1);rows.push([v,vm.city||'',vm.state||'',vm.cc||'AU',vm.lat||'',vm.lon||'',vm.holidayMult||1.10,vm.tempSens!=null?vm.tempSens:''].concat(mm.map(x=>(+x||1).toFixed(2))).join(','))});dlString(rows.join('\n'),'venue_city_mapping_template.csv','text/csv');}
-function exportVenueMapping(){var mhdr=Array.from({length:12},(_,i)=>'Mth '+(i+1)+' Multiplier').join(',');var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mhdr];[...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{var vm=VM[v]||{},mm=VM_MULTS[v]||Array(12).fill(1);rows.push(['"'+esc(v)+'"',vm.city||'',vm.state||'',vm.cc||'',vm.lat||'',vm.lon||'',vm.holidayMult||'',vm.tempSens!=null?vm.tempSens:''].concat(mm.map(x=>(+x||1).toFixed(2))).join(','))});dlString(rows.join('\n'),'venue_mapping_'+iso(new Date())+'.csv','text/csv');}
+function dlVenueTemplate(){
+  var mhdr=Array.from({length:12},(_,i)=>'Mth '+(i+1)+' Multiplier').join(',');
+  var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mhdr];
+  [...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{
+    var vm=VM[v]||{},mm=VM_MULTS[v]||Array(12).fill(1);
+    rows.push([v,vm.city||'',vm.state||'',vm.cc||'AU',vm.lat||'',vm.lon||'',vm.holidayMult||1.10,vm.tempSens!=null?vm.tempSens:''].concat(mm.map(x=>(+x||1).toFixed(2))).join(','));
+  });
+  dlString(rows.join('\n'),'venue_city_mapping_template.csv','text/csv');
+}
+function exportVenueMapping(){
+  var mhdr=Array.from({length:12},(_,i)=>'Mth '+(i+1)+' Multiplier').join(',');
+  var rows=['venue,city,state,country_code,latitude,longitude,holiday_multiplier,temp_sensitivity,'+mhdr];
+  [...new Set(AR.map(r=>r.venue))].sort().forEach(v=>{
+    var vm=VM[v]||{},mm=VM_MULTS[v]||Array(12).fill(1);
+    rows.push(['"'+esc(v)+'"',vm.city||'',vm.state||'',vm.cc||'',vm.lat||'',vm.lon||'',vm.holidayMult||'',vm.tempSens!=null?vm.tempSens:''].concat(mm.map(x=>(+x||1).toFixed(2))).join(','));
+  });
+  dlString(rows.join('\n'),'venue_mapping_'+iso(new Date())+'.csv','text/csv');
+}
 function importVenueMapping(inp){
   if(!inp.files[0])return;
   var rd=new FileReader();
@@ -779,7 +800,13 @@ function importVenueMapping(inp){
     var iv=fi(['venue','name']),ic=fi(['city']),is_=fi(['state']),icc=fi(['country_code','country']),ilat=fi(['latitude','lat']),ilon=fi(['longitude','lon']),ihm=fi(['holiday_multiplier','holiday_mult']),its=fi(['temp_sensitivity','temp_sens']);
     var g=(vs,idx)=>idx>=0?(vs[idx]||'').trim().replace(/[""]/g,''):'';
     var imported=0;
-    for(var i=1;i<ls.length;i++){var vs=ls[i].split(','),vname=g(vs,iv);if(!vname)continue;var city=g(vs,ic),cp=CITIES[city];VM[vname]={city,state:g(vs,is_)||(cp?.s||''),cc:g(vs,icc)||(cp?.cc||'AU'),lat:parseFloat(g(vs,ilat))||cp?.lat||null,lon:parseFloat(g(vs,ilon))||cp?.lon||null,holidayMult:parseFloat(g(vs,ihm))||1.10,tempSens:g(vs,its)?parseFloat(g(vs,its)):null};var mults=[];for(var mi=1;mi<=12;mi++){var mhi=nh.findIndex(function(h){return h==='mth_'+mi+'_multiplier'||h==='mth'+mi+'multiplier'||h.includes('mth_'+mi+'_')||h==='month_'+mi+'_multiplier';});mults.push(mhi>=0&&g(vs,mhi)?parseFloat(g(vs,mhi))||1:1);}VM_MULTS[vname]=mults;imported++;}
+    for(var i=1;i<ls.length;i++){
+      var vs=ls[i].split(','),vname=g(vs,iv);if(!vname)continue;
+      var city=g(vs,ic),cp=CITIES[city];
+      VM[vname]={city,state:g(vs,is_)||(cp?.s||''),cc:g(vs,icc)||(cp?.cc||'AU'),lat:parseFloat(g(vs,ilat))||cp?.lat||null,lon:parseFloat(g(vs,ilon))||cp?.lon||null,holidayMult:parseFloat(g(vs,ihm))||1.10,tempSens:g(vs,its)?parseFloat(g(vs,its)):null};
+      var mults=[];for(var mi=1;mi<=12;mi++){var mhi=nh.findIndex(function(h){return h==='mth_'+mi+'_multiplier'||h==='mth'+mi+'multiplier'||h==='mth_'+mi||h==='month_'+mi+'_multiplier';});mults.push(mhi>=0&&g(vs,mhi)?parseFloat(g(vs,mhi))||1:1);}VM_MULTS[vname]=mults;
+      imported++;
+    }
     alert('Imported '+imported+' venue mappings.');renderVT();
   };rd.readAsText(inp.files[0]);inp.value='';
 }
